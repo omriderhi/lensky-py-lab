@@ -1,14 +1,39 @@
 [tool.poetry]
-name = "lenski-py-lab"
+name = "lensky-py-lab"
 version = "0.1.0"
-description = "A Python package for lenski-py-lab"
-authors = ["Your Name <your.email@example.com>"]
+description = "Remote Sensing and GIS analysis toolkit for the Lensky Lab at Bar-Ilan University"
+authors = ["Omri Derhi <omriderhi@gmail.com>"]
 license = "MIT"
 readme = "README.md"
-packages = [{ include = "lenski_py_lab", from = "src" }]
+homepage = "https://github.com/Oderhi/lensky-py-lab"
+repository = "https://github.com/Oderhi/lensky-py-lab"
+keywords = ["remote sensing", "NDVI", "phenology", "vegetation", "GIS", "time series", "satellite"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: GIS",
+    "Topic :: Scientific/Engineering :: Atmospheric Science",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+packages = [{ include = "lensky_py_lab", from = "src" }]
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "^3.9"
+pandas = "^2.0"
+numpy = "^1.24"
+scipy = "^1.10"
+statsmodels = "^0.14"
+matplotlib = "^3.7"
+requests = "^2.31"
+earthengine-api = {version = "^0.1", optional = true}
+
+[tool.poetry.extras]
+gee = ["earthengine-api"]
 
 [tool.poetry.dev-dependencies]
 pytest = "^7.0"

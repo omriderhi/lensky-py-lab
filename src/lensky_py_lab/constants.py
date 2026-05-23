@@ -1,18 +1,24 @@
+from __future__ import annotations
 from enum import Enum
 
+DATE_FIELD = "DATE"
+TIMESTAMP_FIELD = "TS"
+NDVI_RAW_FIELD = "NDVI RAW"
+NDVI_FILTERED_FIELD = "NDVI filtered"
+NDVI_CLEAN_FIELD = "NDVI clean"
+NDVI_LOWESS_FIELD = "NDVI lowess"
 
-class Constants:
-    default_date_field_name = 'DATE'
-    default_timestamp_field_name = 'TS'
-    hide_from_legend_suffix = '_Hidden'
+IMS_RAINFALL_FIELD = "RAINFALL"
+IMS_TEMPERATURE_FIELD = "TEMP"
+IMS_RAIN_CODE_FIELD = "RAIN_CODE"
 
-    ims_rain_code_field_name = 'RAIN_CODE'
-    ims_rainfall_field_name = 'RAINFALL'
-    ims_temprature_field_name = 'TEMP'
+AVERAGE_GROUP_SIZE = 7
+DATE_FORMATS = ("%b %d, %Y", "%d/%m/%Y")
 
 
-class DataState(str, Enum):
-    RAW = 'raw'
-    FILTERED = 'filtered'
-    CLEAN = 'clean'
-    LOWESS = 'lowess'
+class SatelliteSource(str, Enum):
+    MODIS = "MODIS"
+    SENTINEL2 = "S2"
+    LANDSAT8 = "L8"
+    VENUS = "VENuS"
+    PLANET = "PLANET"
