@@ -206,3 +206,19 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 .idea/
+
+# ---------------------------------------------------------------------------
+# Research data and generated outputs (local only — not version-controlled)
+# ---------------------------------------------------------------------------
+
+# Raw research data (large files, personal paths)
+data/OMRI_RESEARCH_RESULTS/
+
+# All generated results — regenerate by running the pipeline scripts
+data/results/**
+!data/results/**/.gitkeep
+
+# Archive files (thesis document, large notebooks)
+archive/*.docx
+archive/research_base_notebook_local.ipynb
+archive/final_results_processing.ipynb

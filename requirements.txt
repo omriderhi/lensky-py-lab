@@ -1,0 +1,23 @@
+# Core data analysis
+pandas>=2.0
+numpy>=1.24
+scipy>=1.10
+
+# Smoothing and statistical modelling
+statsmodels>=0.14
+
+# Plotting
+matplotlib>=3.7
+
+# HTTP clients (IMS API)
+requests>=2.31
+
+# Phenology (xarray required by Phenolopy)
+xarray>=2023.1
+
+# Google Earth Engine (optional — install separately if needed)
+# earthengine-api>=0.1
+
+# Development / testing
+pytest>=7.0
+pytest-cov>=4.0
