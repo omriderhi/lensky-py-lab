@@ -17,12 +17,17 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 import matplotlib; matplotlib.use("Agg")  # noqa: E402
+import matplotlib.pyplot as plt
 
 from lensky_py_lab import DataSource, Site, SourceConfig
 from lensky_py_lab.io.csv_loader import discover_ims_csvs_for_site, load_ims_csvs
-from lensky_py_lab.phenology import extract_phenology
+from lensky_py_lab.phenology import decompose_woody_herbaceous, extract_phenology
 from lensky_py_lab.plotting.plotter import plot_data_availability
-from lensky_py_lab.visualization.figure_generator import plot_site_publication, save_figure
+from lensky_py_lab.visualization.figure_generator import (
+    plot_decomposition_comparative,
+    plot_site_publication,
+    save_figure,
+)
 from lensky_py_lab.sensors.daily_graphs import load_dat_dir, generate_daily_outputs
 
 # ── paths ────────────────────────────────────────────────────────────────────
@@ -87,6 +92,24 @@ fig_avail = plot_data_availability("Ramat Hanadiv", site_df)
 avail_path = OUT / "RH_NDVI_data_availability.png"
 fig_avail.savefig(avail_path, dpi=150, bbox_inches="tight")
 print(f"Saved → {avail_path}")
+
+# ── decomposition (woody / herbaceous) ───────────────────────────────────────
+from lensky_py_lab.constants import NDVI_LOWESS_FIELD
+
+out_decomp = OUT.parent / "decomposition"
+sat_cols = [c for c in site_df.columns
+            if c.startswith(f"{NDVI_LOWESS_FIELD} ") and "NSRS" not in c]
+for sat_col in sat_cols:
+    sat_name = sat_col.removeprefix(f"{NDVI_LOWESS_FIELD} ")
+    woody, herb = decompose_woody_herbaceous(site_df[sat_col].dropna(), min_dry_seasons=2)
+    if woody is None:
+        print(f"Decomposition skipped for {sat_name} — insufficient dry seasons")
+        continue
+    fig_d = plot_decomposition_comparative(
+        "Ramat Hanadiv", site_df, sat_name, woody, herb, output_dir=out_decomp
+    )
+    plt.close(fig_d)
+    print(f"Saved → {out_decomp / sat_name}_decomposition_vs_NSRS.png")
 
 # ── daily graphs (intra-day NDVI from raw .dat files) ────────────────────────
 if DAT_DIR is not None:

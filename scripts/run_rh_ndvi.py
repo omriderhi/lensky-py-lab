@@ -26,7 +26,8 @@ Inputs:
 Outputs (all under data/results/):
     figures/data_cleaning/RH_NDVI/<source>.png   — per-source cleaning pipeline
     figures/final/RH_NDVI_timeseries.tiff         — publication site time-series
-    figures/comparative/<source>_vs_NSRS.png     — satellite vs NSRS overlays
+    figures/comparative/<source>_vs_NSRS.png          — satellite vs NSRS overlays
+    figures/decomposition/<source>_decomposition_vs_NSRS.png  — 3-panel decomposition vs NSRS
     figures/calibration/NSRS3_calibration_*      — 4-panel calibration figure
     figures/daily_graphs/daily_ndvi_summary.png  — 4-panel seasonal intra-day NDVI
     figures/daily_graphs/<date>_ndvi.png         — per-day NDVI for all sensors
@@ -95,6 +96,7 @@ from lensky_py_lab.sensors.daily_graphs import (
     load_dat_dir,
 )
 from lensky_py_lab.visualization.figure_generator import (
+    plot_decomposition_comparative,
     plot_site_publication,
     save_figure,
 )
@@ -133,13 +135,15 @@ _NSRS_BASE_NAMES = {k for k in NOTEBOOK_CONFIGS if k.startswith("NSRS") and not 
 
 def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = None) -> None:
     # ── output sub-directories ───────────────────────────────────────────────
-    out_cleaning     = out_dir / "figures" / "data_cleaning" / "RH_NDVI"
-    out_final        = out_dir / "figures" / "final"
-    out_comparative  = out_dir / "figures" / "comparative"
-    out_calib        = out_dir / "figures" / "calibration"
-    out_daily        = out_dir / "figures" / "daily_graphs"
-    out_orientation  = out_dir / "figures" / "orientation"
-    for d in (out_cleaning, out_final, out_comparative, out_calib, out_daily, out_orientation):
+    out_cleaning      = out_dir / "figures" / "data_cleaning" / "RH_NDVI"
+    out_final         = out_dir / "figures" / "final"
+    out_comparative   = out_dir / "figures" / "comparative"
+    out_decomposition = out_dir / "figures" / "decomposition"
+    out_calib         = out_dir / "figures" / "calibration"
+    out_daily         = out_dir / "figures" / "daily_graphs"
+    out_orientation   = out_dir / "figures" / "orientation"
+    for d in (out_cleaning, out_final, out_comparative, out_decomposition,
+              out_calib, out_daily, out_orientation):
         d.mkdir(parents=True, exist_ok=True)
 
     # ── Step 1–4: load and process every source ──────────────────────────────
@@ -337,21 +341,40 @@ def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = 
 
     nsrs3_result = _run_calibration(site_df, out_calib, out_dir)
 
-    # ── Step 10: Woody / herbaceous decomposition ────────────────────────────
+    # ── Step 10: Woody / herbaceous decomposition (all satellites) ──────────
     print()
     print("=" * 60)
-    print("Step 10: Woody / herbaceous decomposition (MODIS)")
+    print("Step 10: Woody / herbaceous decomposition")
     print("=" * 60)
 
-    modis_col = f"{NDVI_LOWESS_FIELD} MODIS"
-    if modis_col in site_df.columns:
-        modis_series = site_df[modis_col].dropna()
-        woody, herbaceous = decompose_woody_herbaceous(modis_series)
-        decomp_out = out_dir / "RH_NDVI_MODIS_decomposition.csv"
-        pd.DataFrame({"woody": woody, "herbaceous": herbaceous}).to_csv(decomp_out)
-        print(f"  → {decomp_out.name}")
-    else:
-        print("  MODIS column not found — skipping decomposition.")
+    sat_lowess_for_decomp = [
+        c for c in site_df.columns
+        if c.startswith(f"{NDVI_LOWESS_FIELD} ")
+        and not any(s in c for s in ("NSRS",))
+    ]
+
+    for sat_col in sat_lowess_for_decomp:
+        sat_name = sat_col.removeprefix(f"{NDVI_LOWESS_FIELD} ")
+        series = site_df[sat_col].dropna()
+        woody, herbaceous = decompose_woody_herbaceous(series, min_dry_seasons=2)
+
+        if woody is None:
+            # warning already printed by decompose_woody_herbaceous
+            print(f"  [{sat_name}] skipped — insufficient dry seasons")
+            continue
+
+        # Save CSV
+        decomp_csv = out_dir / f"RH_NDVI_{sat_name}_decomposition.csv"
+        pd.DataFrame({"woody": woody, "herbaceous": herbaceous}).to_csv(decomp_csv)
+        print(f"  [{sat_name}] → {decomp_csv.name}")
+
+        # Generate 3-panel comparative figure vs NSRS sensors
+        fig_decomp = plot_decomposition_comparative(
+            "RH_NDVI", site_df, sat_name, woody, herbaceous,
+            output_dir=out_decomposition,
+        )
+        plt.close(fig_decomp)
+        print(f"  [{sat_name}] → {sat_name}_decomposition_vs_NSRS.png")
 
     # ── Step 11: Intra-day (daily graphs) figures ────────────────────────────
     print()
