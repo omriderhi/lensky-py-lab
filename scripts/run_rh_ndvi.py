@@ -269,24 +269,27 @@ def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = 
         plt.close(fig_comp)
         print(f"  → {out_path.name}")
 
-    # MODIS + NSRS only — qualified sources comparison
+    # MODIS + NSRS only — publication figure with IMS and phenology dots (figures/final/)
     modis_nsrs_cols = [c for c in site_df.columns
                        if c.startswith(f"{NDVI_LOWESS_FIELD} ")
                        and any(s in c for s in ("MODIS", "NSRS"))]
     if modis_nsrs_cols:
-        sub_modis_nsrs = site_df[modis_nsrs_cols].loc[nsrs_start:nsrs_end] if nsrs_start else site_df[modis_nsrs_cols]
+        ims_cols = [c for c in site_df.columns if c in (IMS_RAINFALL_FIELD, IMS_TEMPERATURE_FIELD)]
+        keep_cols = modis_nsrs_cols + ims_cols
+        sub_modis_nsrs = (site_df[keep_cols].loc[nsrs_start:nsrs_end]
+                          if nsrs_start else site_df[keep_cols])
         modis_nsrs_pheno = (pheno_df[pheno_df["satellite"].isin(
             {c.removeprefix(f"{NDVI_LOWESS_FIELD} ") for c in modis_nsrs_cols}
         )] if pheno_arg is not None else None)
-        fig_mn = plot_site(
-            "RH_NDVI — MODIS vs NSRS",
+        fig_mn = plot_site_publication(
+            "RH_NDVI_MODIS_vs_NSRS",
             sub_modis_nsrs,
             phenology_df=modis_nsrs_pheno if (modis_nsrs_pheno is not None and not modis_nsrs_pheno.empty) else None,
+            output_dir=out_final,
+            phenology_style="points",
         )
-        out_mn = out_comparative / "RH_NDVI_MODIS_vs_NSRS.png"
-        fig_mn.savefig(out_mn, dpi=150, bbox_inches="tight")
         plt.close(fig_mn)
-        print(f"  → {out_mn.name}")
+        print(f"  → {out_final / 'RH_NDVI_MODIS_vs_NSRS_timeseries.tiff'}")
 
     # Publication-quality figure (TIFF only) — no phenology markers on main graph
     pub_fig = plot_site_publication("RH_NDVI", site_df, output_dir=out_final)
