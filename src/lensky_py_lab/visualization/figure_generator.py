@@ -371,6 +371,159 @@ def plot_site_publication(
     return fig
 
 
+def plot_decomposition_comparative(
+    site_name: str,
+    site_df: pd.DataFrame,
+    satellite_name: str,
+    woody_series: pd.Series,
+    herbaceous_series: pd.Series,
+    nsrs_full_col: str = "NDVI lowess NSRS_3",
+    nsrs_woody_col: str = "NDVI lowess NSRS_2",
+    nsrs_herb_col: str = "NDVI lowess NSRS_1",
+    output_dir: Optional[Union[str, Path]] = None,
+    figsize: Optional[Tuple[float, float]] = None,
+) -> plt.Figure:
+    """Three-panel figure comparing each satellite NDVI component to its NSRS equivalent.
+
+    Validates the Helman (2015) decomposition against direct sensor measurements:
+
+    * Panel 1 — Full signal: satellite raw NDVI vs NSRS_3 (wide-angle, satellite-imitating).
+    * Panel 2 — Woody component: satellite woody trend vs NSRS_2 (narrow, aimed at canopy).
+    * Panel 3 — Herbaceous component: satellite herbaceous residual vs NSRS_1 (narrow, aimed at understory).
+
+    The NSRS sensors observe each vegetation layer directly; the decomposition
+    attempts to extract those same layers from the mixed satellite pixel.  Matching
+    phenological timing across panels confirms the decomposition is ecologically valid.
+
+    Parameters
+    ----------
+    site_name : str
+        Site identifier used in the figure title.
+    site_df : pd.DataFrame
+        Output of ``Site.run_analysis()``, indexed by unix timestamp.
+        Must contain ``"NDVI lowess <satellite_name>"`` and the NSRS columns.
+    satellite_name : str
+        Name of the satellite source (e.g. ``"MODIS"``).
+    woody_series : pd.Series
+        Woody component produced by
+        :func:`~lensky_py_lab.phenology.phenolopy_integration.decompose_woody_herbaceous`,
+        indexed by unix timestamp.
+    herbaceous_series : pd.Series
+        Herbaceous component from the same decomposition call.
+    nsrs_full_col : str
+        Column name in *site_df* for the full-signal NSRS sensor (default: NSRS_3).
+    nsrs_woody_col : str
+        Column name for the woody-targeting NSRS sensor (default: NSRS_2).
+    nsrs_herb_col : str
+        Column name for the herbaceous-targeting NSRS sensor (default: NSRS_1).
+    output_dir : str or Path, optional
+        If given, saves the figure as a PNG (150 DPI) in this directory.
+    figsize : tuple, optional
+        Override ``(width, height)`` in inches.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Examples
+    --------
+    >>> woody, herb = decompose_woody_herbaceous(site_df["NDVI lowess MODIS"])
+    >>> if woody is not None:
+    ...     fig = plot_decomposition_comparative("RH", site_df, "MODIS", woody, herb,
+    ...                                          output_dir="data/results/figures/decomposition")
+    """
+    from lensky_py_lab.constants import NDVI_LOWESS_FIELD
+
+    sat_col = f"{NDVI_LOWESS_FIELD} {satellite_name}"
+    sat_color = source_color(satellite_name)
+    woody_color = COLORS.get("woody", "#5B4A3F")
+    herb_color = COLORS.get("herbaceous", "#4CAF50")
+
+    panels = [
+        {
+            "sat_series": site_df.get(sat_col),
+            "sat_label": satellite_name,
+            "sat_color": sat_color,
+            "nsrs_col": nsrs_full_col,
+            "nsrs_label": nsrs_full_col.replace(f"{NDVI_LOWESS_FIELD} ", ""),
+            "nsrs_color": source_color(nsrs_full_col.replace(f"{NDVI_LOWESS_FIELD} ", "")),
+            "title": f"Full signal: {satellite_name} vs "
+                     f"{nsrs_full_col.replace(NDVI_LOWESS_FIELD + ' ', '')} (wide-angle)",
+            "ylabel": "NDVI",
+        },
+        {
+            "sat_series": woody_series,
+            "sat_label": f"{satellite_name} woody",
+            "sat_color": woody_color,
+            "nsrs_col": nsrs_woody_col,
+            "nsrs_label": nsrs_woody_col.replace(f"{NDVI_LOWESS_FIELD} ", ""),
+            "nsrs_color": source_color(nsrs_woody_col.replace(f"{NDVI_LOWESS_FIELD} ", "")),
+            "title": f"Woody component: {satellite_name} decomposed vs "
+                     f"{nsrs_woody_col.replace(NDVI_LOWESS_FIELD + ' ', '')} (canopy)",
+            "ylabel": "NDVI",
+        },
+        {
+            "sat_series": herbaceous_series,
+            "sat_label": f"{satellite_name} herbaceous",
+            "sat_color": herb_color,
+            "nsrs_col": nsrs_herb_col,
+            "nsrs_label": nsrs_herb_col.replace(f"{NDVI_LOWESS_FIELD} ", ""),
+            "nsrs_color": source_color(nsrs_herb_col.replace(f"{NDVI_LOWESS_FIELD} ", "")),
+            "title": f"Herbaceous component: {satellite_name} decomposed vs "
+                     f"{nsrs_herb_col.replace(NDVI_LOWESS_FIELD + ' ', '')} (understory)",
+            "ylabel": "ΔNDVI",
+        },
+    ]
+
+    fig, axes = plt.subplots(3, 1, figsize=figsize or (18, 12), sharex=True)
+    ts_unix = site_df.index.values
+
+    for ax, panel in zip(axes, panels):
+        # Satellite / decomposed component
+        sat_s = panel["sat_series"]
+        if sat_s is not None and not sat_s.dropna().empty:
+            sat_ts = sat_s.index.values
+            dates_plot, vals_plot = dense_interpolate_with_gaps(
+                sat_ts, sat_s.values, WIDE_GAP_SECONDS
+            )
+            ax.plot(dates_plot, vals_plot,
+                    label=panel["sat_label"], color=panel["sat_color"],
+                    linewidth=2.2, linestyle="-")
+
+        # NSRS sensor
+        nsrs_col = panel["nsrs_col"]
+        if nsrs_col in site_df.columns:
+            dates_nsrs, vals_nsrs = dense_interpolate_with_gaps(
+                ts_unix, site_df[nsrs_col].values, WIDE_GAP_SECONDS
+            )
+            ax.plot(dates_nsrs, vals_nsrs,
+                    label=panel["nsrs_label"], color=panel["nsrs_color"],
+                    linewidth=1.8, linestyle="--")
+        else:
+            ax.text(0.5, 0.5, f"{nsrs_col} not available",
+                    transform=ax.transAxes, ha="center", va="center",
+                    fontsize=9, color="gray")
+
+        ax.set_ylabel(panel["ylabel"], fontsize=11)
+        ax.set_title(panel["title"], fontsize=11, fontweight="bold")
+        ax.legend(loc="upper left", fontsize=9, framealpha=0.9)
+        _format_date_axis(ax)
+
+    fig.suptitle(
+        f"{site_name} — {satellite_name} woody/herbaceous decomposition vs NSRS",
+        fontsize=13, fontweight="bold", y=1.01,
+    )
+    fig.tight_layout()
+
+    if output_dir is not None:
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        path = out / f"{satellite_name}_decomposition_vs_NSRS.png"
+        fig.savefig(path, dpi=150, bbox_inches="tight")
+
+    return fig
+
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------

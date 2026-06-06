@@ -42,6 +42,7 @@ partitioning in a dryland forest ecosystem". Remote Sensing of Environment.
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -145,7 +146,8 @@ def extract_phenology(
 def decompose_woody_herbaceous(
     series: pd.Series,
     woody_months: Tuple[int, ...] = (6, 7, 8),
-) -> Tuple[pd.Series, pd.Series]:
+    min_dry_seasons: int = 2,
+) -> Tuple[Optional[pd.Series], Optional[pd.Series]]:
     """Decompose NDVI time series into woody and herbaceous components.
 
     Implements the Helman (2015) three-step method:
@@ -167,13 +169,20 @@ def decompose_woody_herbaceous(
     woody_months : tuple of int
         Calendar months considered dry season. Defaults to ``(6, 7, 8)``
         (June, July, August) for Mediterranean sites.
+    min_dry_seasons : int
+        Minimum number of dry-season annual means required to fit a
+        meaningful woody trend. Defaults to ``2``. If fewer are available
+        the decomposition is scientifically unreliable and ``(None, None)``
+        is returned.
 
     Returns
     -------
-    woody_series : pd.Series
+    woody_series : pd.Series or None
         Smooth woody baseline, same index as *series*.
-    herbaceous_series : pd.Series
+        ``None`` if fewer than *min_dry_seasons* dry seasons are covered.
+    herbaceous_series : pd.Series or None
         Herbaceous component (series − woody), same index.
+        ``None`` if fewer than *min_dry_seasons* dry seasons are covered.
 
     Notes
     -----
@@ -184,6 +193,8 @@ def decompose_woody_herbaceous(
     Examples
     --------
     >>> woody, herb = decompose_woody_herbaceous(site_df["NDVI lowess MODIS"])
+    >>> if woody is None:
+    ...     print("Insufficient dry seasons — decomposition skipped")
     """
     times = pd.to_datetime(series.index, unit="s")
     df = pd.DataFrame({"ndvi": series.values}, index=times)
@@ -193,8 +204,19 @@ def decompose_woody_herbaceous(
     annual_woody = dry.groupby(dry.index.year)["ndvi"].mean().dropna()
 
     if annual_woody.empty:
-        empty = pd.Series(np.nan, index=series.index)
-        return empty.rename(f"{series.name}_woody"), empty.rename(f"{series.name}_herbaceous")
+        warnings.warn(
+            f"decompose_woody_herbaceous: '{series.name}' has no dry-season data "
+            f"(months {woody_months}) — skipping decomposition."
+        )
+        return None, None
+
+    if len(annual_woody) < min_dry_seasons:
+        warnings.warn(
+            f"decompose_woody_herbaceous: '{series.name}' has only "
+            f"{len(annual_woody)} dry season(s) — need {min_dry_seasons} "
+            f"for a reliable woody trend. Skipping decomposition."
+        )
+        return None, None
 
     years = annual_woody.index.values.astype(float)
     vals = annual_woody.values
