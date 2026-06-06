@@ -25,7 +25,7 @@ Inputs:
 
 Outputs (all under data/results/):
     figures/data_cleaning/RH_NDVI/<source>.png   — per-source cleaning pipeline
-    figures/final/RH_NDVI_timeseries.tiff/.pdf   — publication site time-series
+    figures/final/RH_NDVI_timeseries.tiff         — publication site time-series
     figures/comparative/<source>_vs_NSRS.png     — satellite vs NSRS overlays
     figures/calibration/NSRS3_calibration_*      — 4-panel calibration figure
     figures/daily_graphs/daily_ndvi_summary.png  — 4-panel seasonal intra-day NDVI
@@ -269,10 +269,32 @@ def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = 
         plt.close(fig_comp)
         print(f"  → {out_path.name}")
 
-    # Publication-quality figure (TIFF + PDF) — no phenology markers on main graph
+    # MODIS + NSRS only — publication figure with IMS and phenology dots (figures/final/)
+    modis_nsrs_cols = [c for c in site_df.columns
+                       if c.startswith(f"{NDVI_LOWESS_FIELD} ")
+                       and any(s in c for s in ("MODIS", "NSRS"))]
+    if modis_nsrs_cols:
+        ims_cols = [c for c in site_df.columns if c in (IMS_RAINFALL_FIELD, IMS_TEMPERATURE_FIELD)]
+        keep_cols = modis_nsrs_cols + ims_cols
+        sub_modis_nsrs = (site_df[keep_cols].loc[nsrs_start:nsrs_end]
+                          if nsrs_start else site_df[keep_cols])
+        modis_nsrs_pheno = (pheno_df[pheno_df["satellite"].isin(
+            {c.removeprefix(f"{NDVI_LOWESS_FIELD} ") for c in modis_nsrs_cols}
+        )] if pheno_arg is not None else None)
+        fig_mn = plot_site_publication(
+            "RH_NDVI_MODIS_vs_NSRS",
+            sub_modis_nsrs,
+            phenology_df=modis_nsrs_pheno if (modis_nsrs_pheno is not None and not modis_nsrs_pheno.empty) else None,
+            output_dir=out_final,
+            phenology_style="points",
+        )
+        plt.close(fig_mn)
+        print(f"  → {out_final / 'RH_NDVI_MODIS_vs_NSRS_timeseries.tiff'}")
+
+    # Publication-quality figure (TIFF only) — no phenology markers on main graph
     pub_fig = plot_site_publication("RH_NDVI", site_df, output_dir=out_final)
     plt.close(pub_fig)
-    print(f"  → {out_final / 'RH_NDVI_timeseries.tiff'} + .pdf")
+    print(f"  → {out_final / 'RH_NDVI_timeseries.tiff'}")
 
     # Data availability chart
     fig_avail = plot_data_availability("RH_NDVI", site_df)
@@ -400,7 +422,7 @@ def _run_calibration(site_df: pd.DataFrame, out_calib: Path, out_dir: Path) -> d
         output_dir=out_calib,
     )
     plt.close(fig_calib)
-    print(f"  → {out_calib / 'NSRS3_calibration_validation.tiff'} + .pdf")
+    print(f"  → {out_calib / 'NSRS3_calibration_validation.tiff'}")
 
     # Statistics CSV
     stats_df = save_calibration_statistics(
