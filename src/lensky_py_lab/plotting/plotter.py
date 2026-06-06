@@ -28,7 +28,13 @@ from lensky_py_lab.constants import (
     NDVI_LOWESS_FIELD,
     NDVI_RAW_FIELD,
 )
-from lensky_py_lab.gap_utils import WIDE_GAP_SECONDS, dense_interpolate_with_gaps, iter_gap_segments
+from lensky_py_lab.gap_utils import (
+    WIDE_GAP_SECONDS,
+    boundaries_from_raw,
+    dense_interpolate_from_boundaries,
+    dense_interpolate_with_gaps,
+    iter_segments_from_boundaries,
+)
 
 # ---------------------------------------------------------------------------
 # Attempt to load shared plot_config from repo root
@@ -111,6 +117,15 @@ def plot_cleaning_pipeline(
 
     ts_unix = processed_df.index.values   # unix timestamps (int)
 
+    # Derive segment boundaries from the raw column once so that every stage
+    # (filtered, clean, LOWESS) shares identical break points. This prevents
+    # data-quality holes in filtered/clean data from producing false extra cuts.
+    raw_bounds = None
+    if NDVI_RAW_FIELD in processed_df.columns:
+        raw_bounds = boundaries_from_raw(
+            ts_unix, processed_df[NDVI_RAW_FIELD].values, WIDE_GAP_SECONDS
+        )
+
     for ax, stage in zip(axes, stages):
         values = processed_df[stage].values
         mask = np.isfinite(values)
@@ -123,8 +138,14 @@ def plot_cleaning_pipeline(
         color = source_color(source_name)
 
         if stage == NDVI_LOWESS_FIELD:
-            # Dense interpolation per segment → smooth curves with pen-lift at wide gaps
-            dates_plot, vals_plot = dense_interpolate_with_gaps(ts_unix, values, WIDE_GAP_SECONDS)
+            if raw_bounds is not None:
+                dates_plot, vals_plot = dense_interpolate_from_boundaries(
+                    ts_unix, values, raw_bounds
+                )
+            else:
+                dates_plot, vals_plot = dense_interpolate_with_gaps(
+                    ts_unix, values, WIDE_GAP_SECONDS
+                )
             ax.plot(dates_plot, vals_plot, linewidth=2.0, color=color, label=stage)
 
         elif stage == NDVI_CLEAN_FIELD:
@@ -133,10 +154,15 @@ def plot_cleaning_pipeline(
             ax.scatter(dates_plot, values[mask], s=18, zorder=3, color=color, label=stage)
 
         else:
-            # RAW / filtered: plot each continuous segment separately so wide gaps
-            # are not bridged by a connecting line
+            # RAW / filtered: iterate segments from raw boundaries so all stages
+            # share the same break points and data-quality gaps are not false-cut
+            seg_iter = (
+                iter_segments_from_boundaries(ts_unix, values, raw_bounds)
+                if raw_bounds is not None
+                else _iter_gap_fallback(ts_unix, values)
+            )
             first = True
-            for ts_seg, vals_seg in iter_gap_segments(ts_unix, values, WIDE_GAP_SECONDS):
+            for ts_seg, vals_seg in seg_iter:
                 dates_seg = pd.to_datetime(ts_seg, unit="s")
                 ax.plot(dates_seg, vals_seg, "o-", color=color,
                         markersize=2, linewidth=0.8,
@@ -300,6 +326,12 @@ def plot_data_availability(
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+def _iter_gap_fallback(ts_unix, values):
+    """Fallback segment iterator used when no raw column is available."""
+    from lensky_py_lab.gap_utils import iter_gap_segments
+    yield from iter_gap_segments(ts_unix, values, WIDE_GAP_SECONDS)
 
 
 _MARKER_LINESTYLES: dict = {"SoS": "--", "PoS": "-", "EoS": ":"}

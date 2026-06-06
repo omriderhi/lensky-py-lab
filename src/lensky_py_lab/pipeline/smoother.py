@@ -4,16 +4,18 @@ import pandas as pd
 import statsmodels.api as sm
 
 from lensky_py_lab.configs import SourceConfig
-from lensky_py_lab.constants import NDVI_CLEAN_FIELD, NDVI_LOWESS_FIELD, TIMESTAMP_FIELD
-from lensky_py_lab.gap_utils import iter_gap_segments
+from lensky_py_lab.constants import NDVI_CLEAN_FIELD, NDVI_LOWESS_FIELD, NDVI_RAW_FIELD, TIMESTAMP_FIELD
+from lensky_py_lab.gap_utils import boundaries_from_raw, iter_segments_from_boundaries
 
 
 def add_lowess(df: pd.DataFrame, config: SourceConfig) -> pd.DataFrame:
     """Apply LOWESS smoothing to NDVI_CLEAN_FIELD and add NDVI_LOWESS_FIELD.
 
-    When config.wide_gap_days is set, data is split into segments at gaps that
-    exceed the threshold and LOWESS is computed independently per segment.
-    This prevents cross-gap contamination of the smooth near gap boundaries.
+    When config.wide_gap_days is set, segment boundaries are derived from the
+    raw data column (NDVI RAW) so that only genuine collection pauses create
+    separate LOWESS fits. Data-quality holes in the filtered/clean data do not
+    produce false splits. LOWESS is then computed independently per segment to
+    prevent cross-gap contamination near gap boundaries.
 
     Bandwidth per segment: frac = images_per_month / n_segment_points.
     If config.lowess_min_neighbors is set, frac is clamped so that at least
@@ -39,7 +41,15 @@ def add_lowess(df: pd.DataFrame, config: SourceConfig) -> pd.DataFrame:
 
     if config.wide_gap_days is not None:
         max_gap_sec = config.wide_gap_days * 24 * 3600
-        segments = list(iter_gap_segments(ts_all, vals_all, max_gap_sec))
+        if NDVI_RAW_FIELD in df.columns:
+            # Detect gaps from raw data: only genuine collection pauses create segments.
+            # Filtering artefacts (data-quality holes) are ignored.
+            raw_bounds = boundaries_from_raw(df.index.values, df[NDVI_RAW_FIELD].values, max_gap_sec)
+            segments = list(iter_segments_from_boundaries(ts_all, vals_all, raw_bounds))
+        else:
+            # Fallback when raw column is unavailable (e.g. GEE-derived sources)
+            from lensky_py_lab.gap_utils import iter_gap_segments
+            segments = list(iter_gap_segments(ts_all, vals_all, max_gap_sec))
     else:
         segments = [(ts_all, vals_all)]
 
