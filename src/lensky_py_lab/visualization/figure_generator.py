@@ -19,13 +19,12 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Union
 
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from scipy.interpolate import interp1d
 
 # ---------------------------------------------------------------------------
 # Attempt to load shared plot_config from repo root
@@ -72,6 +71,8 @@ except ImportError:  # pragma: no cover
     def source_color(name: str) -> str:  # type: ignore[misc]
         """Fallback when plot_config is unavailable."""
         return "#333333"
+
+from lensky_py_lab.gap_utils import WIDE_GAP_SECONDS, dense_interpolate_with_gaps  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Phenology marker colour constants (thesis-consistent)
@@ -256,7 +257,9 @@ def plot_site_publication(
         src = col.removeprefix(f"{NDVI_LOWESS_FIELD} ")
         color = source_color(src)
         linestyle = "--" if src.upper().startswith("NSRS") else "-"
-        dates_plot, vals_plot = _dense_interpolate(ts_unix, site_df[col].values)
+        dates_plot, vals_plot = dense_interpolate_with_gaps(
+            ts_unix, site_df[col].values, WIDE_GAP_SECONDS
+        )
         ax.plot(dates_plot, vals_plot, label=src, color=color,
                 linewidth=2.0, linestyle=linestyle)
 
@@ -307,32 +310,6 @@ def plot_site_publication(
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
-
-
-def _dense_interpolate(
-    ts_unix: np.ndarray,
-    values: np.ndarray,
-    n_points: int = 800,
-):
-    """Linearly interpolate *values* onto a dense uniform timestamp grid.
-
-    Converts a sparse LOWESS output into a smooth connected curve for display.
-    NaN entries in *values* are ignored.
-    """
-    mask = np.isfinite(values)
-    n_valid = int(mask.sum())
-
-    if n_valid == 0:
-        return pd.to_datetime(np.array([], dtype=np.int64), unit="s"), np.array([])
-    if n_valid == 1:
-        return pd.to_datetime(ts_unix[mask], unit="s"), values[mask]
-
-    x = ts_unix[mask].astype(np.float64)
-    y = values[mask]
-    f = interp1d(x, y, kind="linear", bounds_error=False, fill_value=np.nan)
-    x_dense = np.linspace(x.min(), x.max(), n_points)
-    y_dense = f(x_dense)
-    return pd.to_datetime(x_dense.astype(np.int64), unit="s"), y_dense
 
 
 def _format_date_axis(ax: plt.Axes) -> None:

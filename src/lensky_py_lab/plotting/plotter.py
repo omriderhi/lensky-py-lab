@@ -12,14 +12,13 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
 
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.figure import Figure
-from scipy.interpolate import interp1d
 
 from lensky_py_lab.constants import (
     IMS_RAINFALL_FIELD,
@@ -28,6 +27,13 @@ from lensky_py_lab.constants import (
     NDVI_FILTERED_FIELD,
     NDVI_LOWESS_FIELD,
     NDVI_RAW_FIELD,
+)
+from lensky_py_lab.gap_utils import (
+    WIDE_GAP_SECONDS,
+    boundaries_from_raw,
+    dense_interpolate_from_boundaries,
+    dense_interpolate_with_gaps,
+    iter_segments_from_boundaries,
 )
 
 # ---------------------------------------------------------------------------
@@ -111,6 +117,15 @@ def plot_cleaning_pipeline(
 
     ts_unix = processed_df.index.values   # unix timestamps (int)
 
+    # Derive segment boundaries from the raw column once so that every stage
+    # (filtered, clean, LOWESS) shares identical break points. This prevents
+    # data-quality holes in filtered/clean data from producing false extra cuts.
+    raw_bounds = None
+    if NDVI_RAW_FIELD in processed_df.columns:
+        raw_bounds = boundaries_from_raw(
+            ts_unix, processed_df[NDVI_RAW_FIELD].values, WIDE_GAP_SECONDS
+        )
+
     for ax, stage in zip(axes, stages):
         values = processed_df[stage].values
         mask = np.isfinite(values)
@@ -123,8 +138,14 @@ def plot_cleaning_pipeline(
         color = source_color(source_name)
 
         if stage == NDVI_LOWESS_FIELD:
-            # Dense interpolation → always smooth and connected
-            dates_plot, vals_plot = _dense_interpolate(ts_unix, values)
+            if raw_bounds is not None:
+                dates_plot, vals_plot = dense_interpolate_from_boundaries(
+                    ts_unix, values, raw_bounds
+                )
+            else:
+                dates_plot, vals_plot = dense_interpolate_with_gaps(
+                    ts_unix, values, WIDE_GAP_SECONDS
+                )
             ax.plot(dates_plot, vals_plot, linewidth=2.0, color=color, label=stage)
 
         elif stage == NDVI_CLEAN_FIELD:
@@ -133,10 +154,20 @@ def plot_cleaning_pipeline(
             ax.scatter(dates_plot, values[mask], s=18, zorder=3, color=color, label=stage)
 
         else:
-            # RAW / filtered: dense data → dots + connecting line (NaN masked)
-            dates_plot = pd.to_datetime(ts_unix[mask], unit="s")
-            ax.plot(dates_plot, values[mask], "o-", color=color,
-                    markersize=2, linewidth=0.8, label=stage)
+            # RAW / filtered: iterate segments from raw boundaries so all stages
+            # share the same break points and data-quality gaps are not false-cut
+            seg_iter = (
+                iter_segments_from_boundaries(ts_unix, values, raw_bounds)
+                if raw_bounds is not None
+                else _iter_gap_fallback(ts_unix, values)
+            )
+            first = True
+            for ts_seg, vals_seg in seg_iter:
+                dates_seg = pd.to_datetime(ts_seg, unit="s")
+                ax.plot(dates_seg, vals_seg, "o-", color=color,
+                        markersize=2, linewidth=0.8,
+                        label=stage if first else None)
+                first = False
 
         ax.set_ylabel(stage, fontsize=9)
         ax.legend(loc="upper right", fontsize=8)
@@ -189,7 +220,9 @@ def plot_site(
         color = source_color(src)
         linestyle = "--" if src.upper().startswith("NSRS") else "-"
 
-        dates_plot, vals_plot = _dense_interpolate(ts_unix, site_df[col].values)
+        dates_plot, vals_plot = dense_interpolate_with_gaps(
+            ts_unix, site_df[col].values, WIDE_GAP_SECONDS
+        )
         ax.plot(dates_plot, vals_plot, label=src, color=color,
                 linewidth=1.8, linestyle=linestyle)
 
@@ -295,48 +328,10 @@ def plot_data_availability(
 # ---------------------------------------------------------------------------
 
 
-def _dense_interpolate(
-    ts_unix: np.ndarray,
-    values: np.ndarray,
-    n_points: int = 800,
-) -> Tuple[pd.DatetimeIndex, np.ndarray]:
-    """Linearly interpolate *values* onto a dense uniform timestamp grid.
-
-    This converts a sparse LOWESS output (e.g., 4–100 knot points spread
-    over several years) into a smooth connected curve suitable for display.
-
-    Parameters
-    ----------
-    ts_unix : np.ndarray
-        Unix timestamps (integer seconds) matching *values*.
-    values : np.ndarray
-        NDVI values; NaN entries are ignored.
-    n_points : int
-        Number of points in the dense output grid. Default 800.
-
-    Returns
-    -------
-    dates_dense : pd.DatetimeIndex
-    vals_dense  : np.ndarray
-    """
-    mask = np.isfinite(values)
-    n_valid = mask.sum()
-
-    if n_valid == 0:
-        return pd.to_datetime(np.array([], dtype=np.int64), unit="s"), np.array([])
-
-    if n_valid == 1:
-        return pd.to_datetime(ts_unix[mask], unit="s"), values[mask]
-
-    x = ts_unix[mask].astype(np.float64)
-    y = values[mask]
-
-    f = interp1d(x, y, kind="linear", bounds_error=False, fill_value=np.nan)
-    x_dense = np.linspace(x.min(), x.max(), n_points)
-    y_dense = f(x_dense)
-
-    dates_dense = pd.to_datetime(x_dense.astype(np.int64), unit="s")
-    return dates_dense, y_dense
+def _iter_gap_fallback(ts_unix, values):
+    """Fallback segment iterator used when no raw column is available."""
+    from lensky_py_lab.gap_utils import iter_gap_segments
+    yield from iter_gap_segments(ts_unix, values, WIDE_GAP_SECONDS)
 
 
 _MARKER_LINESTYLES: dict = {"SoS": "--", "PoS": "-", "EoS": ":"}
