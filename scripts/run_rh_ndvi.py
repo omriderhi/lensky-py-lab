@@ -75,6 +75,7 @@ from lensky_py_lab import DataSource, Site, SourceConfig
 from lensky_py_lab.constants import (
     IMS_RAINFALL_FIELD,
     IMS_TEMPERATURE_FIELD,
+    NDVI_CLEAN_FIELD,
     NDVI_LOWESS_FIELD,
 )
 from lensky_py_lab.io.csv_loader import discover_ims_csvs_for_site, load_ims_csvs
@@ -121,8 +122,9 @@ NOTEBOOK_CONFIGS: dict = {
 }
 
 # Which sources are ground sensors (NSRS) vs satellite
-_NSRS_SOURCES = {k for k in NOTEBOOK_CONFIGS if k.startswith("NSRS")}
-_SAT_SOURCES  = {k for k in NOTEBOOK_CONFIGS if not k.startswith("NSRS")}
+_NSRS_SOURCES    = {k for k in NOTEBOOK_CONFIGS if k.startswith("NSRS")}
+_SAT_SOURCES     = {k for k in NOTEBOOK_CONFIGS if not k.startswith("NSRS")}
+_NSRS_BASE_NAMES = {k for k in NOTEBOOK_CONFIGS if k.startswith("NSRS") and not k.endswith("_B")}
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -148,6 +150,9 @@ def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = 
     nsrs_sources: dict[str, DataSource] = {}
     sat_sources:  dict[str, DataSource] = {}
 
+    # ── Pass A: process every source (no plotting yet) ───────────────────────
+    all_processed: dict[str, DataSource] = {}
+
     for source_name, nb_cfg in NOTEBOOK_CONFIGS.items():
         csv_path = data_dir / f"{source_name}.csv"
         if not csv_path.exists():
@@ -158,22 +163,36 @@ def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = 
         ds = DataSource.from_csv(source_name, csv_path, config)
         ds.process()   # runs filter_extreme_values → filter_by_average_groups → LOWESS
 
-        n_raw    = ds.raw_data[NDVI_LOWESS_FIELD].count() if NDVI_LOWESS_FIELD in ds.raw_data else 0
-        n_clean  = ds.processed["NDVI clean"].count()
+        n_clean  = ds.processed[NDVI_CLEAN_FIELD].count()
         n_lowess = ds.processed[NDVI_LOWESS_FIELD].count() if NDVI_LOWESS_FIELD in ds.processed else 0
         print(f"  {source_name:12s}  raw={len(ds.raw_data):4d}  "
               f"clean={n_clean:4d}  lowess={n_lowess:4d}")
 
-        # ── data-cleaning figure (per-source pipeline plot) ──────────────────
-        fig_clean = plot_cleaning_pipeline(source_name, ds.processed)
-        fig_clean.savefig(out_cleaning / f"{source_name}.png", dpi=100, bbox_inches="tight")
-        plt.close(fig_clean)
-        print(f"    → {out_cleaning / source_name}.png")
-
+        all_processed[source_name] = ds
         if source_name in _NSRS_SOURCES:
             nsrs_sources[source_name] = ds
         else:
             sat_sources[source_name] = ds
+
+    # ── Pass B: generate data-cleaning figures ───────────────────────────────
+    # NSRS base sources are merged with their _B variant and plotted once.
+    # _B variants are skipped here — their data appears in the primary's figure.
+    for source_name, ds in all_processed.items():
+        if source_name.endswith("_B"):
+            continue
+
+        backup_name = f"{source_name}_B"
+        if backup_name in all_processed:
+            merged_df = _merge_processed_for_plot(
+                ds.processed, all_processed[backup_name].processed
+            )
+            fig_clean = plot_cleaning_pipeline(source_name, merged_df)
+        else:
+            fig_clean = plot_cleaning_pipeline(source_name, ds.processed)
+
+        fig_clean.savefig(out_cleaning / f"{source_name}.png", dpi=100, bbox_inches="tight")
+        plt.close(fig_clean)
+        print(f"    → {out_cleaning / source_name}.png")
 
     # ── Step 5–6: assemble Site and run analysis ─────────────────────────────
     print()
@@ -456,6 +475,20 @@ def _run_calibration(site_df: pd.DataFrame, out_calib: Path, out_dir: Path) -> d
     print(f"  → calibration_statistics.csv")
 
     return calib_result
+
+
+def _merge_processed_for_plot(
+    primary_df: pd.DataFrame,
+    backup_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """Merge two processed DataFrames for a unified cleaning-pipeline figure.
+
+    Primary timestamps are kept as-is; backup contributes only at timestamps
+    not already present in primary. The result is sorted by index so the plotter
+    sees a single time series with a natural gap between the two deployment periods.
+    """
+    extra = backup_df.index.difference(primary_df.index)
+    return pd.concat([primary_df, backup_df.loc[extra]]).sort_index()
 
 
 def _run_daily_graphs(data_dir: Path, out_daily: Path, dat_dir: Optional[Path] = None) -> None:
