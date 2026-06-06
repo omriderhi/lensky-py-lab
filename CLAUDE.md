@@ -128,8 +128,8 @@ All outputs go to `data/results/` (gitignored — regenerate by running `run_rh_
 
 | Figure | Output path | Format |
 |---|---|---|
-| Calibration validation (4-panel) | `figures/calibration/NSRS3_calibration_validation.*` | TIFF + PDF |
-| Site time-series | `figures/final/<site>_timeseries.*` | TIFF + PDF |
+| Calibration validation (4-panel) | `figures/calibration/NSRS3_calibration_validation.png` | PNG |
+| Site time-series | `figures/final/<site>_timeseries.png` | PNG |
 | Comparative (NSRS vs satellite) | `figures/comparative/<site>_NSRS_vs_<sat>.png` | PNG |
 | Data-cleaning pipeline | `figures/data_cleaning/<site>/<source>.png` | PNG |
 | Daily intra-day NDVI | `figures/daily_graphs/*.png` | PNG |

@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 # ---------------------------------------------------------------------------
 
 FIGURE_DPI = 300
-FIGURE_FORMATS = ["tiff"]
+FIGURE_FORMATS = ["png"]
 FIGURE_MIN_WIDTH = 12              # inches — minimum figure width
 
 # ---------------------------------------------------------------------------
