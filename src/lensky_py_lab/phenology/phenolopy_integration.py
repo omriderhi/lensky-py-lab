@@ -127,7 +127,8 @@ def extract_phenology(
     _OUTPUT_COLS = [
         "site", "satellite", "year",
         "SoS_date", "PoS_date", "EoS_date",
-        "PoS_value", "SoS_doy", "PoS_doy", "EoS_doy",
+        "SoS_value", "PoS_value", "EoS_value",
+        "SoS_doy", "PoS_doy", "EoS_doy",
     ]
     if rows:
         out = pd.DataFrame(rows)[_OUTPUT_COLS]
@@ -327,11 +328,16 @@ def _extract_markers(series: pd.Series, factor: float = 0.2) -> Optional[Dict]:
     def _ts_to_doy(ts: float) -> int:
         return _ts_to_date(ts).dayofyear
 
+    sos_value = float(interp_fn(sos_ts).clip(vals_arr.min() - 0.05, vals_arr.max() + 0.05))
+    eos_value = float(interp_fn(eos_ts).clip(vals_arr.min() - 0.05, vals_arr.max() + 0.05))
+
     return {
         "SoS_date":  _ts_to_date(sos_ts),
         "PoS_date":  _ts_to_date(pos_ts),
         "EoS_date":  _ts_to_date(eos_ts),
+        "SoS_value": sos_value,
         "PoS_value": pos_value,
+        "EoS_value": eos_value,
         "SoS_doy":   _ts_to_doy(sos_ts),
         "PoS_doy":   _ts_to_doy(pos_ts),
         "EoS_doy":   _ts_to_doy(eos_ts),

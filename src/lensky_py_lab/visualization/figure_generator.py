@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
@@ -48,7 +48,7 @@ try:
 except ImportError:  # pragma: no cover
     _HAS_PLOT_CONFIG = False
     FIGURE_DPI = 300
-    FIGURE_FORMATS = ["tiff", "pdf"]
+    FIGURE_FORMATS = ["tiff"]
     COLORS: Dict[str, str] = {
         "modis":           "#1f77b4",
         "sentinel2":       "#ff7f0e",
@@ -84,6 +84,9 @@ PHENOLOGY_COLORS: Dict[str, str] = {
     "EoS": COLORS.get("eos", "#984EA3"),   # purple
 }
 
+# Marker shapes for scatter-point style
+_PHENO_SHAPES: Dict[str, str] = {"SoS": "^", "PoS": "o", "EoS": "v"}
+
 # ---------------------------------------------------------------------------
 # Public helpers
 # ---------------------------------------------------------------------------
@@ -107,7 +110,7 @@ def save_figure(
     stem : str
         File name without extension.
     formats : list of str, optional
-        Formats to write. Defaults to ``["tiff", "pdf"]``.
+        Formats to write. Defaults to ``["tiff"]``.
     dpi : int
         Resolution in dots per inch. Defaults to 300.
 
@@ -137,8 +140,9 @@ def add_phenology_markers(
     source: Optional[str] = None,
     year: Optional[int] = None,
     annotate: bool = True,
+    style: str = "lines",
 ) -> None:
-    """Draw SoS / PoS / EoS vertical dashed lines on a date-indexed axes.
+    """Draw SoS / PoS / EoS markers on a date-indexed axes.
 
     Parameters
     ----------
@@ -152,7 +156,12 @@ def add_phenology_markers(
     year : int, optional
         Filter to a single hydrological year.
     annotate : bool
-        If *True*, add a small rotated label near each line.
+        If *True* (lines style), add a small rotated label near each line.
+    style : str
+        ``"lines"`` — vertical dashed span lines (default, publication style).
+        ``"points"`` — scatter dots placed on the NDVI curve at each event date.
+        Requires ``SoS_value``, ``PoS_value``, ``EoS_value`` columns in
+        *phenology_df* (produced by ``extract_phenology``).
 
     Notes
     -----
@@ -167,6 +176,11 @@ def add_phenology_markers(
     if year is not None and "year" in df.columns:
         df = df[df["year"] == year]
 
+    if style == "points":
+        _add_phenology_points(ax, df)
+        return
+
+    # --- lines style (original) ---
     _MARKER_LINESTYLES = {"SoS": "--", "PoS": "-", "EoS": ":"}
     drawn_types: set = set()
     xlim = ax.get_xlim()
@@ -201,6 +215,50 @@ def add_phenology_markers(
                     linewidth=1.3, alpha=0.8, label=marker)
 
 
+def _add_phenology_points(ax: plt.Axes, df: pd.DataFrame) -> None:
+    """Plot SoS/PoS/EoS as scatter dots on the NDVI curve.
+
+    Dot fill = phenology-type colour; dot edge = source colour.
+    One legend entry per marker type is added.
+    """
+    xlim = ax.get_xlim()
+    drawn_types: set = set()
+
+    _DATE_VAL = [
+        ("SoS", "SoS_date", "SoS_value"),
+        ("PoS", "PoS_date", "PoS_value"),
+        ("EoS", "EoS_date", "EoS_value"),
+    ]
+
+    for _, row in df.iterrows():
+        sat = str(row.get("satellite", ""))
+        edge_color = source_color(sat)
+        for marker, col_date, col_val in _DATE_VAL:
+            date_raw = row.get(col_date)
+            val = row.get(col_val)
+            if date_raw is None or pd.isna(date_raw):
+                continue
+            if val is None or pd.isna(val):
+                continue
+            date = pd.to_datetime(date_raw)
+            if not (xlim[0] <= mdates.date2num(date) <= xlim[1]):
+                continue
+            ax.scatter(
+                date, val,
+                color=PHENOLOGY_COLORS[marker],
+                marker=_PHENO_SHAPES[marker],
+                s=80, zorder=5,
+                edgecolors=edge_color, linewidths=1.5,
+            )
+            drawn_types.add(marker)
+
+    for marker in ["SoS", "PoS", "EoS"]:
+        if marker in drawn_types:
+            ax.scatter([], [], color=PHENOLOGY_COLORS[marker],
+                       marker=_PHENO_SHAPES[marker], s=80,
+                       edgecolors="black", linewidths=1.5, label=marker)
+
+
 def plot_site_publication(
     site_name: str,
     site_df: pd.DataFrame,
@@ -208,11 +266,12 @@ def plot_site_publication(
     output_dir: Optional[Union[str, Path]] = None,
     ims_rain: bool = True,
     figsize: Optional[Tuple[float, float]] = None,
+    phenology_style: str = "lines",
 ) -> plt.Figure:
     """Publication-quality site time-series figure.
 
     Overlays all LOWESS series, optionally annotates phenological markers,
-    and draws rainfall as a secondary axis.  Saved as 300 DPI TIFF + PDF when
+    and draws rainfall as a secondary axis.  Saved as 300 DPI TIFF when
     *output_dir* is provided.
 
     Parameters
@@ -224,13 +283,16 @@ def plot_site_publication(
         by unix timestamp.
     phenology_df : pd.DataFrame, optional
         Output of :func:`~lensky_py_lab.phenology.phenolopy_integration.extract_phenology`.
-        If provided, SoS / PoS / EoS lines are drawn on the axes.
+        If provided, SoS / PoS / EoS markers are drawn on the axes.
     output_dir : str or Path, optional
-        If given, the figure is saved here as TIFF and PDF.
+        If given, the figure is saved here as TIFF.
     ims_rain : bool
         Whether to plot rainfall on a secondary y-axis (default *True*).
     figsize : tuple, optional
         Override ``(width, height)`` in inches.
+    phenology_style : str
+        ``"lines"`` — vertical span lines (default).
+        ``"points"`` — scatter dots placed on each NDVI curve at the event date.
 
     Returns
     -------
@@ -239,7 +301,8 @@ def plot_site_publication(
     Examples
     --------
     >>> fig = plot_site_publication("Ramat Hanadiv", site_df, phenology_df,
-    ...                             output_dir="data/results/figures/final")
+    ...                             output_dir="data/results/figures/final",
+    ...                             phenology_style="points")
     """
     from lensky_py_lab.constants import (
         IMS_RAINFALL_FIELD,
@@ -265,7 +328,8 @@ def plot_site_publication(
 
     # Phenology markers — drawn before legend so they appear in it
     if phenology_df is not None and not phenology_df.empty:
-        add_phenology_markers(ax, phenology_df, annotate=True)
+        annotate = (phenology_style == "lines")
+        add_phenology_markers(ax, phenology_df, annotate=annotate, style=phenology_style)
 
     ax.set_ylabel("NDVI", fontsize=12)
     ax.set_xlabel("Date", fontsize=12)
@@ -316,5 +380,3 @@ def _format_date_axis(ax: plt.Axes) -> None:
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m"))
     ax.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
     plt.setp(ax.get_xticklabels(), rotation=45, ha="right", fontsize=9)
-
-
