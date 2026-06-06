@@ -48,7 +48,7 @@ try:
 except ImportError:  # pragma: no cover
     _HAS_PLOT_CONFIG = False
     FIGURE_DPI = 300
-    FIGURE_FORMATS = ["tiff", "pdf"]
+    FIGURE_FORMATS = ["tiff"]
     COLORS: Dict[str, str] = {
         "modis":           "#1f77b4",
         "sentinel2":       "#ff7f0e",

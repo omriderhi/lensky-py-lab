@@ -306,9 +306,8 @@ def create_calibration_figure(
     # Save
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    for fmt in ("tiff", "pdf"):
-        fig.savefig(output_dir / f"NSRS3_calibration_validation.{fmt}",
-                    dpi=300, bbox_inches="tight")
+    fig.savefig(output_dir / "NSRS3_calibration_validation.tiff",
+                dpi=300, bbox_inches="tight")
 
     return fig
 
