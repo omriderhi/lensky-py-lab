@@ -110,7 +110,7 @@ def save_figure(
     stem : str
         File name without extension.
     formats : list of str, optional
-        Formats to write. Defaults to ``["tiff"]``.
+        Formats to write. Defaults to ``["png"]``.
     dpi : int
         Resolution in dots per inch. Defaults to 300.
 
@@ -271,7 +271,7 @@ def plot_site_publication(
     """Publication-quality site time-series figure.
 
     Overlays all LOWESS series, optionally annotates phenological markers,
-    and draws rainfall as a secondary axis.  Saved as 300 DPI TIFF when
+    and draws rainfall as a secondary axis.  Saved as 300 DPI PNG when
     *output_dir* is provided.
 
     Parameters
@@ -285,7 +285,7 @@ def plot_site_publication(
         Output of :func:`~lensky_py_lab.phenology.phenolopy_integration.extract_phenology`.
         If provided, SoS / PoS / EoS markers are drawn on the axes.
     output_dir : str or Path, optional
-        If given, the figure is saved here as TIFF.
+        If given, the figure is saved here as PNG.
     ims_rain : bool
         Whether to plot rainfall on a secondary y-axis (default *True*).
     figsize : tuple, optional

@@ -25,6 +25,8 @@ Inputs:
 
 Outputs (all under data/results/):
     figures/data_cleaning/RH_NDVI/<source>.png   — per-source cleaning pipeline
+    figures/final/RH_NDVI_timeseries.png          — publication site time-series
+    figures/comparative/<source>_vs_NSRS.png     — satellite vs NSRS overlays
     figures/final/RH_NDVI_timeseries.tiff         — publication site time-series
     figures/comparative/<source>_vs_NSRS.png          — satellite vs NSRS overlays
     figures/decomposition/<source>_decomposition_vs_NSRS.png  — 3-panel decomposition vs NSRS
@@ -320,12 +322,12 @@ def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = 
             phenology_style="points",
         )
         plt.close(fig_mn)
-        print(f"  → {out_final / 'RH_NDVI_MODIS_vs_NSRS_timeseries.tiff'}")
+        print(f"  → {out_final / 'RH_NDVI_MODIS_vs_NSRS_timeseries.png'}")
 
-    # Publication-quality figure (TIFF only) — no phenology markers on main graph
+    # Publication-quality figure — no phenology markers on main graph
     pub_fig = plot_site_publication("RH_NDVI", site_df, output_dir=out_final)
     plt.close(pub_fig)
-    print(f"  → {out_final / 'RH_NDVI_timeseries.tiff'}")
+    print(f"  → {out_final / 'RH_NDVI_timeseries.png'}")
 
     # Data availability chart
     fig_avail = plot_data_availability("RH_NDVI", site_df)
@@ -488,7 +490,7 @@ def _run_calibration(site_df: pd.DataFrame, out_calib: Path, out_dir: Path) -> d
         output_dir=out_calib,
     )
     plt.close(fig_calib)
-    print(f"  → {out_calib / 'NSRS3_calibration_validation.tiff'}")
+    print(f"  → {out_calib / 'NSRS3_calibration_validation.png'}")
 
     # Statistics CSV
     stats_df = save_calibration_statistics(
@@ -543,10 +545,12 @@ def _run_daily_graphs(data_dir: Path, out_daily: Path, dat_dir: Optional[Path] =
             None,
         )
 
+    dat_processed = False
     if resolved_dat_dir is not None and resolved_dat_dir.exists():
         dat_files = sorted(resolved_dat_dir.glob("*.dat"))
         if dat_files:
             print(f"  Raw .dat dir: {resolved_dat_dir}  ({len(dat_files)} file(s))")
+            dat_processed = True
             try:
                 out_dat = out_daily / "from_dat"
                 df_dat = load_dat_dir(resolved_dat_dir, recursive=True)
@@ -555,6 +559,10 @@ def _run_daily_graphs(data_dir: Path, out_daily: Path, dat_dir: Optional[Path] =
                     print(f"  → {Path(p).name}")
             except Exception as exc:
                 warnings.warn(f"Daily-graphs from .dat files failed: {exc}")
+        else:
+            warnings.warn(
+                f"DAT directory {resolved_dat_dir} contains no .dat files — skipping."
+            )
 
     # ── Source 2: pre-extracted seasonal Excel workbook ──────────────────────
     excel_candidates = [
@@ -570,7 +578,7 @@ def _run_daily_graphs(data_dir: Path, out_daily: Path, dat_dir: Optional[Path] =
     excel_path = next((p for p in excel_candidates if p.exists()), None)
 
     if excel_path is None:
-        if resolved_dat_dir is None:
+        if not dat_processed:
             warnings.warn(
                 "No daily-graph data sources found (no .dat directory, no Excel workbook). "
                 "Pass --dat-dir or set DAT_DIR / DAILY_GRAPHS_EXCEL. Skipping Step 11."

@@ -15,8 +15,7 @@ Usage:
     )
 
 Outputs:
-    - data/results/figures/calibration/NSRS3_calibration_validation.tiff
-    - data/results/figures/calibration/NSRS3_calibration_validation.pdf
+    - data/results/figures/calibration/NSRS3_calibration_validation.png
     - data/results/calibration_statistics.csv
 
 Notes
@@ -52,7 +51,7 @@ from scipy.stats import pearsonr
 # Published / thesis calibration constant
 # ---------------------------------------------------------------------------
 
-NSRS3_PUBLISHED_FACTOR = 1.4
+NSRS3_PUBLISHED_FACTOR = 1.36
 """Empirical correction factor reported in the thesis (Derhi, 2025).
 
 The NSRS_3 sensor captured sky reflectance due to a slight pole tilt,
@@ -203,7 +202,7 @@ def create_calibration_figure(
         Output of :func:`find_optimal_calibration_factor`. Computed
         automatically if not supplied.
     output_dir : Path
-        Directory where TIFF and PDF figures are saved.
+        Directory where PNG figures are saved.
     factor : float
         Factor used for the corrected series (default 1.4, the thesis value).
 
@@ -214,7 +213,7 @@ def create_calibration_figure(
     Notes
     -----
     Uses the publication-quality style from ``plot_config.py``.
-    Saved as 300 DPI TIFF and PDF using a colorblind-safe palette.
+    Saved as 300 DPI PNG using a colorblind-safe palette.
 
     Examples
     --------
@@ -306,7 +305,7 @@ def create_calibration_figure(
     # Save
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_dir / "NSRS3_calibration_validation.tiff",
+    fig.savefig(output_dir / "NSRS3_calibration_validation.png",
                 dpi=300, bbox_inches="tight")
 
     return fig
