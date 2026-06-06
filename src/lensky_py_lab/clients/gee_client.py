@@ -40,7 +40,12 @@ from typing import Any, Dict, List, Optional, Union
 
 import pandas as pd
 
-from lensky_py_lab.constants import NDVI_RAW_FIELD, TIMESTAMP_FIELD, SatelliteSource
+from lensky_py_lab.constants import (
+    NDVI_RAW_FIELD,
+    SATELLITE_NATIVE_RESOLUTION_M,
+    TIMESTAMP_FIELD,
+    SatelliteSource,
+)
 
 # ---------------------------------------------------------------------------
 # Collection registry
@@ -66,11 +71,8 @@ _CLOUD_FILTER: Dict[SatelliteSource, tuple] = {
 }
 
 #: Native spatial resolution [m] used as the default reducer scale.
-_DEFAULT_SCALE: Dict[SatelliteSource, int] = {
-    SatelliteSource.MODIS:     250,
-    SatelliteSource.SENTINEL2: 10,
-    SatelliteSource.LANDSAT8:  30,
-}
+#: Canonical values live in constants.SATELLITE_NATIVE_RESOLUTION_M.
+_DEFAULT_SCALE: Dict[SatelliteSource, int] = SATELLITE_NATIVE_RESOLUTION_M
 
 #: Minimum NDVI threshold — pixels below this are masked out before the
 #: spatial reducer, matching maskLowValues(img.gte(0.35)) in the JS script.
@@ -322,6 +324,107 @@ class GEEClient:
             ``ee.Geometry.Polygon`` object.
         """
         return self._ee.Geometry.Polygon([coords])
+
+    def get_ndvi_thumbnail(
+        self,
+        geometry: Any,
+        start_date: Union[str, date],
+        end_date: Union[str, date],
+        source: SatelliteSource = SatelliteSource.MODIS,
+        scale: Optional[int] = None,
+        dimensions: int = 512,
+        palette: Optional[List[str]] = None,
+        ndvi_min: Optional[float] = None,
+    ) -> "Any":
+        """Fetch a median NDVI composite as a NumPy RGBA array (in-process).
+
+        Unlike ``Export.image.toDrive`` (which writes to Google Drive
+        asynchronously), this method retrieves the raster directly via GEE's
+        thumbnail API and returns it as a NumPy array suitable for display or
+        use as a figure background.
+
+        Args:
+            geometry: ``ee.Geometry`` rectangle defining the export region.
+            start_date: Composite window start (ISO string or ``date``).
+            end_date: Composite window end (ISO string or ``date``).
+            source: Satellite source. Defaults to MODIS.
+            scale: Spatial resolution [m]. Defaults to the source's native
+                resolution (250 m for MODIS, 10 m for S2, 30 m for L8).
+            dimensions: Maximum side length of the returned image in pixels.
+                GEE caps this at 1024.
+            palette: List of hex colours (low → high NDVI). Defaults to the
+                green gradient from the original JS script.
+            ndvi_min: Mask pixels below this NDVI value before compositing.
+                ``None`` (default) skips masking — useful for a visual export
+                that shows bare soil and non-vegetated surfaces.
+
+        Returns:
+            NumPy array of shape ``(H, W, 4)`` with dtype ``float32``,
+            values in ``[0, 1]``.  The array can be passed directly to
+            ``matplotlib.pyplot.imshow``.
+
+        Example::
+
+            client = GEEClient(project="my-gee-project")
+            rect = client.polygon_geometry([
+                [34.90, 32.50], [35.00, 32.50],
+                [35.00, 32.61], [34.90, 32.61],
+            ])
+            arr = client.get_ndvi_thumbnail(rect, "2020-01-01", "2020-02-01")
+            plt.imshow(arr)
+        """
+        import io as _io
+
+        import matplotlib.pyplot as _plt
+        import numpy as _np
+        import requests as _requests
+
+        if palette is None:
+            palette = [
+                "FFFFFF", "CE7E45", "DF923D", "F1B555", "FCD163", "99B718",
+                "74A901", "66A000", "529400", "3E8601", "207401", "056201",
+                "004C00", "023B01", "012E01", "011D01", "011301",
+            ]
+
+        ee = self._ee
+        start_str = _fmt_date(start_date)
+        end_str = _fmt_date(end_date)
+        effective_scale = scale if scale is not None else _DEFAULT_SCALE[source]
+
+        collection = (
+            ee.ImageCollection(_COLLECTIONS[source])
+            .filterDate(start_str, end_str)
+            .filterBounds(geometry)
+        )
+
+        if source in _CLOUD_FILTER:
+            prop, threshold = _CLOUD_FILTER[source]
+            collection = collection.filter(ee.Filter.lt(prop, threshold))
+
+        def _apply(image: Any) -> Any:
+            ndvi = _compute_ndvi(ee, image, source)
+            if ndvi_min is not None:
+                ndvi = ndvi.updateMask(ndvi.gte(ndvi_min))
+            return ndvi
+
+        ndvi_image = collection.map(_apply).median().clip(geometry)
+
+        url = ndvi_image.getThumbURL({
+            "region":     geometry,
+            "dimensions": dimensions,
+            "format":     "png",
+            "min":        0,
+            "max":        1,
+            "palette":    palette,
+        })
+
+        response = _requests.get(url, timeout=60)
+        response.raise_for_status()
+
+        arr = _plt.imread(_io.BytesIO(response.content), format="png")
+        if arr.dtype != _np.float32:
+            arr = arr.astype(_np.float32) / 255.0
+        return arr
 
 
 # ---------------------------------------------------------------------------

@@ -31,6 +31,8 @@ Outputs (all under data/results/):
     figures/daily_graphs/daily_ndvi_summary.png  — 4-panel seasonal intra-day NDVI
     figures/daily_graphs/<date>_ndvi.png         — per-day NDVI for all sensors
     figures/daily_graphs/<date>_bands_sensor1.png — NIR/Red irradiance for sensor 1
+    figures/orientation/pixel_size_comparison.*  — MODIS/L8/S2 pixel grid schematic
+    figures/orientation/site_location.*          — Mediterranean + Israel map (cartopy)
     RH_NDVI_final_result.csv                     — joined LOWESS time series
     phenology_markers.csv                        — SoS/PoS/EoS per year/satellite
     calibration_statistics.csv                   — NSRS_3 calibration metrics
@@ -47,6 +49,7 @@ Pipeline (mirrors the original notebook exactly):
     9. NSRS_3 calibration validation (new)
    10. Phenological marker extraction (new)
    11. Intra-day NSRS daily graph figures (new)
+   12. Orientation map + pixel-size comparison figures (new)
 """
 
 from __future__ import annotations
@@ -94,6 +97,10 @@ from lensky_py_lab.visualization.figure_generator import (
     plot_site_publication,
     save_figure,
 )
+from lensky_py_lab.visualization.orientation_map import (
+    plot_pixel_size_comparison,
+    plot_site_location,
+)
 
 # ── source configurations — verbatim from the original notebook ──────────────
 
@@ -124,12 +131,13 @@ _SAT_SOURCES  = {k for k in NOTEBOOK_CONFIGS if not k.startswith("NSRS")}
 
 def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = None) -> None:
     # ── output sub-directories ───────────────────────────────────────────────
-    out_cleaning    = out_dir / "figures" / "data_cleaning" / "RH_NDVI"
-    out_final       = out_dir / "figures" / "final"
-    out_comparative = out_dir / "figures" / "comparative"
-    out_calib       = out_dir / "figures" / "calibration"
-    out_daily       = out_dir / "figures" / "daily_graphs"
-    for d in (out_cleaning, out_final, out_comparative, out_calib, out_daily):
+    out_cleaning     = out_dir / "figures" / "data_cleaning" / "RH_NDVI"
+    out_final        = out_dir / "figures" / "final"
+    out_comparative  = out_dir / "figures" / "comparative"
+    out_calib        = out_dir / "figures" / "calibration"
+    out_daily        = out_dir / "figures" / "daily_graphs"
+    out_orientation  = out_dir / "figures" / "orientation"
+    for d in (out_cleaning, out_final, out_comparative, out_calib, out_daily, out_orientation):
         d.mkdir(parents=True, exist_ok=True)
 
     # ── Step 1–4: load and process every source ──────────────────────────────
@@ -333,6 +341,22 @@ def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = 
     print("=" * 60)
 
     _run_daily_graphs(data_dir, out_daily, dat_dir=dat_dir)
+
+    # ── Step 12: Orientation and pixel-size figures ──────────────────────────
+    print()
+    print("=" * 60)
+    print("Step 12: Orientation and pixel-size figures")
+    print("=" * 60)
+
+    plot_pixel_size_comparison(out_dir=out_orientation, stem="pixel_size_comparison")
+    print(f"  Saved pixel-size comparison → {out_orientation}")
+
+    try:
+        plot_site_location(out_dir=out_orientation, stem="site_location")
+        print(f"  Saved site location map    → {out_orientation}")
+    except ImportError:
+        print("  Skipping site location map (cartopy not installed).")
+        print("  Install with: pip install cartopy  or  pip install 'lensky-py-lab[maps]'")
 
     print()
     print("=" * 60)
