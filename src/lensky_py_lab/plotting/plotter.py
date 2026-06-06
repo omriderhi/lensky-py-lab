@@ -12,14 +12,13 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
 
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.figure import Figure
-from scipy.interpolate import interp1d
 
 from lensky_py_lab.constants import (
     IMS_RAINFALL_FIELD,
@@ -29,6 +28,7 @@ from lensky_py_lab.constants import (
     NDVI_LOWESS_FIELD,
     NDVI_RAW_FIELD,
 )
+from lensky_py_lab.gap_utils import WIDE_GAP_SECONDS, dense_interpolate_with_gaps, iter_gap_segments
 
 # ---------------------------------------------------------------------------
 # Attempt to load shared plot_config from repo root
@@ -123,8 +123,8 @@ def plot_cleaning_pipeline(
         color = source_color(source_name)
 
         if stage == NDVI_LOWESS_FIELD:
-            # Dense interpolation → always smooth and connected
-            dates_plot, vals_plot = _dense_interpolate(ts_unix, values)
+            # Dense interpolation per segment → smooth curves with pen-lift at wide gaps
+            dates_plot, vals_plot = dense_interpolate_with_gaps(ts_unix, values, WIDE_GAP_SECONDS)
             ax.plot(dates_plot, vals_plot, linewidth=2.0, color=color, label=stage)
 
         elif stage == NDVI_CLEAN_FIELD:
@@ -133,10 +133,15 @@ def plot_cleaning_pipeline(
             ax.scatter(dates_plot, values[mask], s=18, zorder=3, color=color, label=stage)
 
         else:
-            # RAW / filtered: dense data → dots + connecting line (NaN masked)
-            dates_plot = pd.to_datetime(ts_unix[mask], unit="s")
-            ax.plot(dates_plot, values[mask], "o-", color=color,
-                    markersize=2, linewidth=0.8, label=stage)
+            # RAW / filtered: plot each continuous segment separately so wide gaps
+            # are not bridged by a connecting line
+            first = True
+            for ts_seg, vals_seg in iter_gap_segments(ts_unix, values, WIDE_GAP_SECONDS):
+                dates_seg = pd.to_datetime(ts_seg, unit="s")
+                ax.plot(dates_seg, vals_seg, "o-", color=color,
+                        markersize=2, linewidth=0.8,
+                        label=stage if first else None)
+                first = False
 
         ax.set_ylabel(stage, fontsize=9)
         ax.legend(loc="upper right", fontsize=8)
@@ -189,7 +194,9 @@ def plot_site(
         color = source_color(src)
         linestyle = "--" if src.upper().startswith("NSRS") else "-"
 
-        dates_plot, vals_plot = _dense_interpolate(ts_unix, site_df[col].values)
+        dates_plot, vals_plot = dense_interpolate_with_gaps(
+            ts_unix, site_df[col].values, WIDE_GAP_SECONDS
+        )
         ax.plot(dates_plot, vals_plot, label=src, color=color,
                 linewidth=1.8, linestyle=linestyle)
 
@@ -293,50 +300,6 @@ def plot_data_availability(
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
-
-
-def _dense_interpolate(
-    ts_unix: np.ndarray,
-    values: np.ndarray,
-    n_points: int = 800,
-) -> Tuple[pd.DatetimeIndex, np.ndarray]:
-    """Linearly interpolate *values* onto a dense uniform timestamp grid.
-
-    This converts a sparse LOWESS output (e.g., 4–100 knot points spread
-    over several years) into a smooth connected curve suitable for display.
-
-    Parameters
-    ----------
-    ts_unix : np.ndarray
-        Unix timestamps (integer seconds) matching *values*.
-    values : np.ndarray
-        NDVI values; NaN entries are ignored.
-    n_points : int
-        Number of points in the dense output grid. Default 800.
-
-    Returns
-    -------
-    dates_dense : pd.DatetimeIndex
-    vals_dense  : np.ndarray
-    """
-    mask = np.isfinite(values)
-    n_valid = mask.sum()
-
-    if n_valid == 0:
-        return pd.to_datetime(np.array([], dtype=np.int64), unit="s"), np.array([])
-
-    if n_valid == 1:
-        return pd.to_datetime(ts_unix[mask], unit="s"), values[mask]
-
-    x = ts_unix[mask].astype(np.float64)
-    y = values[mask]
-
-    f = interp1d(x, y, kind="linear", bounds_error=False, fill_value=np.nan)
-    x_dense = np.linspace(x.min(), x.max(), n_points)
-    y_dense = f(x_dense)
-
-    dates_dense = pd.to_datetime(x_dense.astype(np.int64), unit="s")
-    return dates_dense, y_dense
 
 
 _MARKER_LINESTYLES: dict = {"SoS": "--", "PoS": "-", "EoS": ":"}

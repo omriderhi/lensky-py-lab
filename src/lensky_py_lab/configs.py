@@ -18,6 +18,13 @@ class SourceConfig:
             None = skip smoothing.
         general_factor: Optional multiplicative scale applied to LOWESS output.
             None = no scaling.
+        wide_gap_days: Gaps larger than this (in days) between consecutive clean
+            observations cause LOWESS to be computed per segment independently.
+            None disables gap-based segmentation (single LOWESS over all data).
+            Default: 60 days (≈ 2 months).
+        lowess_min_neighbors: When set, clamps the effective LOWESS neighbourhood
+            so it always uses at least this many points (overrides frac when frac
+            would use fewer). None = keep frac fixed regardless of segment length.
     """
 
     min_value: Optional[float] = None
@@ -25,6 +32,8 @@ class SourceConfig:
     average_window: Optional[float] = None
     images_per_month: Optional[int] = None
     general_factor: Optional[float] = None
+    wide_gap_days: Optional[int] = 60
+    lowess_min_neighbors: Optional[int] = None
 
     @classmethod
     def from_notebook_dict(cls, d: dict) -> SourceConfig:
@@ -33,10 +42,15 @@ class SourceConfig:
         def _parse(v: object) -> Optional[float]:
             return None if (v is False or v is None) else float(v)
 
+        def _parse_int(v: object, default: Optional[int]) -> Optional[int]:
+            return default if (v is False or v is None) else int(v)
+
         return cls(
             min_value=_parse(d.get("min")),
             max_value=_parse(d.get("max")),
             average_window=_parse(d.get("average_window")),
             images_per_month=int(d["images_per_month"]) if d.get("images_per_month") else None,
             general_factor=_parse(d.get("general_factor")),
+            wide_gap_days=_parse_int(d.get("wide_gap_days"), 60),
+            lowess_min_neighbors=_parse_int(d.get("lowess_min_neighbors"), None),
         )
