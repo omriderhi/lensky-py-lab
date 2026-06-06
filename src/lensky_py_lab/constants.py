@@ -22,3 +22,13 @@ class SatelliteSource(str, Enum):
     LANDSAT8 = "L8"
     VENUS = "VENuS"
     PLANET = "PLANET"
+
+
+# Native ground-sampling distance [metres] for each satellite used in the research.
+# Source: MOD09GQ (250 m), Landsat-8 OLI (30 m), Sentinel-2 MSI (10 m).
+# GEEClient._DEFAULT_SCALE and orientation_map both import from here.
+SATELLITE_NATIVE_RESOLUTION_M: "dict[SatelliteSource, int]" = {
+    SatelliteSource.MODIS:     250,
+    SatelliteSource.SENTINEL2:  10,
+    SatelliteSource.LANDSAT8:   30,
+}
