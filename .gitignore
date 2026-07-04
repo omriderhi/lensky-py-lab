@@ -211,9 +211,6 @@ __marimo__/
 # Research data and generated outputs (local only — not version-controlled)
 # ---------------------------------------------------------------------------
 
-# Raw research data (large files, personal paths)
-data/OMRI_RESEARCH_RESULTS/
-
 # All generated results — regenerate by running the pipeline scripts
 data/results/**
 !data/results/**/.gitkeep
