@@ -41,6 +41,6 @@ IMS files must have:
 ## Data Sources
 
 Data was originally stored on Google Drive at:
-`OMRI_RESEARCH_RESULTS/{site_name}/{source}.csv`
+`research_results/{site_name}/{source}.csv`
 
 Export these files and place them here following the structure above.

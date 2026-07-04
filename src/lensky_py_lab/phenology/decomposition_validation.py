@@ -10,7 +10,7 @@ Hanadiv study site:
 
 It reproduces the numbers reported in Table 4 of the manuscript.
 
-Repository: https://github.com/omrid/Lensky-py-lab
+Repository: https://github.com/omriderhi/lensky-py-lab
 
 Note
 ----

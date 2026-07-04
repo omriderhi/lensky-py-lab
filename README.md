@@ -40,7 +40,7 @@ pip install -e ".[gee]"
 
 ## Environment variables
 
-All scripts read data paths from environment variables. No hardcoded paths exist in the codebase.
+All scripts read data paths from environment variables — no hardcoded local paths exist in `src/` or `scripts/`.
 
 | Variable | Required | Description |
 |---|---|---|
