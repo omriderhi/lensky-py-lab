@@ -35,6 +35,7 @@ from lensky_py_lab.gap_utils import (
     dense_interpolate_with_gaps,
     iter_segments_from_boundaries,
 )
+from lensky_py_lab.visualization.phenology_markers import draw_phenology_markers
 
 # ---------------------------------------------------------------------------
 # Attempt to load shared plot_config from repo root
@@ -61,12 +62,6 @@ except ImportError:
 # ---------------------------------------------------------------------------
 
 _PIPELINE_STAGES = [NDVI_RAW_FIELD, NDVI_FILTERED_FIELD, NDVI_CLEAN_FIELD, NDVI_LOWESS_FIELD]
-
-_PHENOLOGY_COLORS: dict = {
-    "SoS": COLORS.get("sos", "#FF7F00"),   # orange
-    "PoS": COLORS.get("pos", "#E41A1C"),   # red
-    "EoS": COLORS.get("eos", "#984EA3"),   # purple
-}
 
 
 # ---------------------------------------------------------------------------
@@ -198,8 +193,9 @@ def plot_site(
         Output of :meth:`~lensky_py_lab.models.site.Site.run_analysis`,
         indexed by unix timestamp.
     phenology_df : pd.DataFrame, optional
-        If provided, draws SoS / PoS / EoS vertical dashed lines.
-        Expected columns: ``SoS_date``, ``PoS_date``, ``EoS_date``.
+        If provided, draws SoS / PoS / EoS points at the event date/value.
+        Expected columns: ``SoS_date``/``SoS_value``, ``PoS_date``/``PoS_value``,
+        ``EoS_date``/``EoS_value``.
         Colours: SoS=orange, PoS=red, EoS=purple (thesis convention).
     figsize : tuple, optional
         Override ``(width, height)`` in inches.
@@ -228,7 +224,7 @@ def plot_site(
 
     # ---- Phenological markers ----
     if phenology_df is not None and not phenology_df.empty:
-        _draw_phenology_markers(ax, phenology_df)
+        draw_phenology_markers(ax, phenology_df)
 
     ax.set_ylabel("NDVI", fontsize=11)
     ax.set_xlabel("Date", fontsize=11)
@@ -332,45 +328,6 @@ def _iter_gap_fallback(ts_unix, values):
     """Fallback segment iterator used when no raw column is available."""
     from lensky_py_lab.gap_utils import iter_gap_segments
     yield from iter_gap_segments(ts_unix, values, WIDE_GAP_SECONDS)
-
-
-_MARKER_LINESTYLES: dict = {"SoS": "--", "PoS": "-", "EoS": ":"}
-
-
-def _draw_phenology_markers(ax: plt.Axes, phenology_df: pd.DataFrame) -> None:
-    """Draw SoS / PoS / EoS vertical lines on *ax* using source colours.
-
-    Each source gets its own colour (matching the NDVI curve).  Line styles
-    distinguish marker type: SoS '--', PoS '-', EoS ':'.
-    One schematic legend entry per marker type (black, no source label) is
-    added so the legend stays compact regardless of how many sources are shown.
-    """
-    xlim = ax.get_xlim()
-    drawn_types: set = set()
-
-    for _, row in phenology_df.iterrows():
-        sat = str(row.get("satellite", ""))
-        color = source_color(sat)
-        for marker, col in [("SoS", "SoS_date"), ("PoS", "PoS_date"), ("EoS", "EoS_date")]:
-            val = row.get(col)
-            if val is None or pd.isna(val):
-                continue
-            date = pd.to_datetime(val)
-            if not (xlim[0] <= mdates.date2num(date) <= xlim[1]):
-                continue
-            ax.axvline(date, color=color, linestyle=_MARKER_LINESTYLES[marker],
-                       linewidth=1.3, alpha=0.8, label=None)
-            y_top = ax.get_ylim()[1]
-            ax.text(date, y_top * 0.97, marker,
-                    color=color, fontsize=7, ha="center", va="top",
-                    rotation=90, clip_on=True)
-            drawn_types.add(marker)
-
-    # One schematic legend entry per marker type actually drawn
-    for marker in ["SoS", "PoS", "EoS"]:
-        if marker in drawn_types:
-            ax.plot([], [], color="black", linestyle=_MARKER_LINESTYLES[marker],
-                    linewidth=1.3, alpha=0.8, label=marker)
 
 
 def _format_date_axis(ax: plt.Axes) -> None:

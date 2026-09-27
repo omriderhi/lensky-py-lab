@@ -319,7 +319,6 @@ def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = 
             sub_modis_nsrs,
             phenology_df=modis_nsrs_pheno if (modis_nsrs_pheno is not None and not modis_nsrs_pheno.empty) else None,
             output_dir=out_final,
-            phenology_style="points",
         )
         plt.close(fig_mn)
         print(f"  → {out_final / 'RH_NDVI_MODIS_vs_NSRS_timeseries.png'}")

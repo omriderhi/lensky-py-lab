@@ -112,7 +112,7 @@ Extracted by `extract_phenology()` using a **native scipy/Savitzky-Golay seasona
 - **PoS** (Peak of Season) — maximum NDVI, typically January–April in Mediterranean; colour: `#FF0000`
 - **EoS** (End of Season) — dry-season senescence, typically March–May; colour: `#800080`
 
-Markers are rendered as vertical dashed lines on comparative plots (NSRS vs satellite). They are **not** drawn on the main time-series figure.
+Markers are rendered as colored scatter points (▲ SoS, ● PoS, ▼ EoS) on comparative plots (NSRS vs satellite). They are **not** drawn on the main time-series figure.
 
 ## NSRS_3 calibration
 
