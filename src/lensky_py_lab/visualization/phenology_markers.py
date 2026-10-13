@@ -37,7 +37,7 @@ try:
         source_color,
     )
 except ImportError:  # pragma: no cover
-    COLORS: Dict[str, str] = {"sos": "#FFA500", "pos": "#FF0000", "eos": "#800080"}
+    COLORS: Dict[str, str] = {"sos": "#F0E442", "pos": "#D55E00", "eos": "#56B4E9"}
     PHENO_MARKER_SIZE = 220
     PHENO_MARKER_EDGE_WIDTH = 2.0
     PHENO_MARKER_EDGE_COLOR = "black"
@@ -50,9 +50,9 @@ except ImportError:  # pragma: no cover
 # ---------------------------------------------------------------------------
 
 PHENOLOGY_COLORS: Dict[str, str] = {
-    "SoS": COLORS.get("sos", "#FFA500"),   # orange
-    "PoS": COLORS.get("pos", "#FF0000"),   # red
-    "EoS": COLORS.get("eos", "#800080"),   # purple
+    "SoS": COLORS.get("sos", "#F0E442"),   # yellow
+    "PoS": COLORS.get("pos", "#D55E00"),   # vermillion
+    "EoS": COLORS.get("eos", "#56B4E9"),   # sky blue
 }
 
 _PHENO_SHAPES: Dict[str, str] = {"SoS": "^", "PoS": "o", "EoS": "v"}
@@ -92,9 +92,9 @@ def draw_phenology_markers(
     Notes
     -----
     Marker colours are thesis-consistent:
-    * SoS -> orange  (#FFA500)
-    * PoS -> red     (#FF0000)
-    * EoS -> purple  (#800080)
+    * SoS -> yellow     (#F0E442)
+    * PoS -> vermillion (#D55E00)
+    * EoS -> sky blue   (#56B4E9)
     """
     df = phenology_df
     if source is not None and "satellite" in df.columns:

@@ -250,7 +250,7 @@ def plot_site(
 
     if has_rain:
         ax2 = ax.twinx()
-        rain_color = COLORS.get("rainfall", "steelblue")
+        rain_color = COLORS.get("rainfall", "#56B4E9")
         # Rainfall: bar chart only for non-NaN dates
         rain_vals = site_df[IMS_RAINFALL_FIELD].values
         rain_mask = np.isfinite(rain_vals)
@@ -265,7 +265,7 @@ def plot_site(
         ax3 = ax.twinx()
         if has_rain:
             ax3.spines["right"].set_position(("outward", 60))
-        temp_color = COLORS.get("temperature", "red")
+        temp_color = COLORS.get("temperature", "#999999")
         # Temperature: connect only non-NaN values (no gaps)
         temp_vals = site_df[IMS_TEMPERATURE_FIELD].values
         temp_mask = np.isfinite(temp_vals)

@@ -108,9 +108,9 @@ Scripts in `scripts/`:
 
 Extracted by `extract_phenology()` using a **native scipy/Savitzky-Golay seasonal-amplitude** implementation — no external Phenolopy dependency.
 
-- **SoS** (Start of Season) — onset of herbaceous green-up after autumn rain; colour: `#FFA500`
-- **PoS** (Peak of Season) — maximum NDVI, typically January–April in Mediterranean; colour: `#FF0000`
-- **EoS** (End of Season) — dry-season senescence, typically March–May; colour: `#800080`
+- **SoS** (Start of Season) — onset of herbaceous green-up after autumn rain; colour: `#F0E442` (yellow)
+- **PoS** (Peak of Season) — maximum NDVI, typically January–April in Mediterranean; colour: `#D55E00` (vermillion)
+- **EoS** (End of Season) — dry-season senescence, typically March–May; colour: `#56B4E9` (sky blue)
 
 Markers are rendered as colored scatter points (▲ SoS, ● PoS, ▼ EoS) on comparative plots (NSRS vs satellite). They are **not** drawn on the main time-series figure.
 

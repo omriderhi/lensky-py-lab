@@ -224,8 +224,8 @@ def create_calibration_figure(
         apply_publication_style()
     except ImportError:
         COLORS = {
-            "nsrs1": "#8c564b", "nsrs2": "#e377c2",
-            "nsrs3_raw": "#bcbd22", "nsrs3_corrected": "#17becf",
+            "nsrs1": "#D55E00", "nsrs2": "#CC79A7",
+            "nsrs3_raw": "#999999", "nsrs3_corrected": "#000000",
         }
 
     nsrs3_corrected = apply_calibration(nsrs3_raw, factor)
@@ -257,7 +257,10 @@ def create_calibration_figure(
     ax_ts.set_title("A — Time Series Comparison")
     ax_ts.set_xlabel("Date")
     ax_ts.set_ylabel("NDVI")
-    ax_ts.legend()
+    # Headroom above the data so the (large) legend never covers a curve
+    y_lo, y_hi = ax_ts.get_ylim()
+    ax_ts.set_ylim(y_lo, y_hi + 0.3 * (y_hi - y_lo))
+    ax_ts.legend(loc="upper center", ncol=2)
     _add_sky_catch_box(ax_ts)
 
     # ------------------------------------------------------------------ #
@@ -285,11 +288,11 @@ def create_calibration_figure(
     # ------------------------------------------------------------------ #
     rmse_df = calibration_result["rmse_curve"]
     ax_rmse.plot(rmse_df["factor"], rmse_df["rmse"],
-                 color="#1f77b4", linewidth=2.0, label="RMSE")
-    ax_rmse.axvline(factor, color="#FF0000", linestyle="--", linewidth=1.8,
+                 color=COLORS["nsrs3_corrected"], linewidth=2.0, label="RMSE")
+    ax_rmse.axvline(factor, color=COLORS["nsrs1"], linestyle="--", linewidth=1.8,
                     label=f"Chosen factor = {factor}")
     opt = calibration_result["optimal_factor"]
-    ax_rmse.axvline(opt, color="#FFA500", linestyle=":", linewidth=1.5,
+    ax_rmse.axvline(opt, color=COLORS["nsrs2"], linestyle=":", linewidth=1.5,
                     label=f"Optimal factor = {opt:.2f}")
     ax_rmse.set_title("D — RMSE vs Correction Factor")
     ax_rmse.set_xlabel("Correction factor")
@@ -379,7 +382,7 @@ def _scatter_with_stats(
     if mask.sum() >= 3:
         m, b = np.polyfit(x[mask], y[mask], 1)
         x_line = np.linspace(lo, hi, 100)
-        ax.plot(x_line, m * x_line + b, color="#d62728", linewidth=1.5, label="Regression")
+        ax.plot(x_line, m * x_line + b, color="#D55E00", linewidth=1.5, label="Regression")
 
         r2 = _pearson_r2(x.values, y.values)
         rmse = _rmse(y.values, x.values)

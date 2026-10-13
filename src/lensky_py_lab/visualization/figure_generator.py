@@ -64,22 +64,22 @@ except ImportError:  # pragma: no cover
     NSRS_LINEWIDTH = 2.8
     SATELLITE_LINEWIDTH = 1.8
     COLORS: Dict[str, str] = {
-        "modis":           "#1f77b4",
-        "sentinel2":       "#ff7f0e",
-        "landsat8":        "#2ca02c",
-        "venus":           "#d62728",
-        "planet":          "#9467bd",
-        "nsrs1":           "#8c564b",
-        "nsrs2":           "#e377c2",
-        "nsrs3_raw":       "#bcbd22",
-        "nsrs3_corrected": "#17becf",
-        "woody":           "#5B4A3F",
-        "herbaceous":      "#4CAF50",
-        "sos":             "#FF7F00",
-        "pos":             "#E41A1C",
-        "eos":             "#984EA3",
-        "rainfall":        "#4169E1",
-        "temperature":     "#DC143C",
+        "modis":           "#0072B2",
+        "sentinel2":       "#E69F00",
+        "landsat8":        "#009E73",
+        "venus":           "#D55E00",
+        "planet":          "#CC79A7",
+        "nsrs1":           "#D55E00",
+        "nsrs2":           "#CC79A7",
+        "nsrs3_raw":       "#999999",
+        "nsrs3_corrected": "#000000",
+        "woody":           "#E69F00",
+        "herbaceous":      "#009E73",
+        "sos":             "#F0E442",
+        "pos":             "#D55E00",
+        "eos":             "#56B4E9",
+        "rainfall":        "#56B4E9",
+        "temperature":     "#999999",
     }
 
     def source_color(name: str) -> str:  # type: ignore[misc]
@@ -174,9 +174,9 @@ def add_phenology_markers(
     Notes
     -----
     Marker colours are thesis-consistent:
-    * SoS → orange  (#FFA500)
-    * PoS → red     (#FF0000)
-    * EoS → purple  (#800080)
+    * SoS → yellow     (#F0E442)
+    * PoS → vermillion (#D55E00)
+    * EoS → sky blue   (#56B4E9)
     """
     draw_phenology_markers(ax, phenology_df, source=source, year=year)
 
@@ -261,7 +261,7 @@ def plot_site_publication(
         rain_mask = np.isfinite(rain_vals)
         rain_dates = pd.to_datetime(ts_unix[rain_mask], unit="s")
         ax2.bar(rain_dates, rain_vals[rain_mask], alpha=0.22,
-                color=COLORS.get("rainfall", "steelblue"),
+                color=COLORS.get("rainfall", "#56B4E9"),
                 width=5, label="Rainfall (mm)", zorder=0)
         ax2.invert_yaxis()
         ax2.set_ylabel("Rainfall (mm)", fontsize=10)
@@ -275,7 +275,7 @@ def plot_site_publication(
         temp_mask = np.isfinite(temp_vals)
         temp_dates = pd.to_datetime(ts_unix[temp_mask], unit="s")
         ax3.plot(temp_dates, temp_vals[temp_mask],
-                 color=COLORS.get("temperature", "red"),
+                 color=COLORS.get("temperature", "#999999"),
                  linewidth=1.2, linestyle=":", label="Temp (°C)")
         ax3.set_ylabel("Temperature (°C)", fontsize=10)
         ax3.legend(loc="lower right", fontsize=FONT_SIZE_LEGEND)
@@ -354,8 +354,8 @@ def plot_decomposition_comparative(
 
     sat_col = f"{NDVI_LOWESS_FIELD} {satellite_name}"
     sat_color = source_color(satellite_name)
-    woody_color = COLORS.get("woody", "#5B4A3F")
-    herb_color = COLORS.get("herbaceous", "#4CAF50")
+    woody_color = COLORS.get("woody", "#E69F00")
+    herb_color = COLORS.get("herbaceous", "#009E73")
 
     panels = [
         {

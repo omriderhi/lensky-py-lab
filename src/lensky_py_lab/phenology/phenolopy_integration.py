@@ -26,9 +26,9 @@ SoS is found on the *left* (ascending) side of the peak; EoS on the *right*
 peak by construction.
 
 Marker colours used throughout this project:
-  - SoS (Start of Season): onset of herbaceous green-up after autumn rain — orange #FF7F00
-  - PoS (Peak of Season):  maximum NDVI, typically January — red #E41A1C
-  - EoS (End of Season):   dry-season senescence, typically March–April — purple #984EA3
+  - SoS (Start of Season): onset of herbaceous green-up after autumn rain — yellow #F0E442
+  - PoS (Peak of Season):  maximum NDVI, typically January — vermillion #D55E00
+  - EoS (End of Season):   dry-season senescence, typically March–April — sky blue #56B4E9
 
 The Helman (2015) method decomposes NDVI into:
   - Woody component   = mean NDVI during June–August (dry season)

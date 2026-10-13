@@ -23,35 +23,49 @@ FIGURE_FORMATS = ["png"]
 FIGURE_MIN_WIDTH = 12              # inches — minimum figure width
 
 # ---------------------------------------------------------------------------
-# Color palette — distinguishable, colorblind-safe (Wong 2011), print-safe
+# Color palette — Okabe & Ito (2008) / Wong (2011) colorblind-safe palette.
+# Distinguishable under deuteranopia, protanopia and tritanopia.  Do not add red/green pairs; use shape or line weight as a
+# second channel where two series must share a figure.
 # ---------------------------------------------------------------------------
+
+WONG = {
+    "black":           "#000000",
+    "orange":          "#E69F00",
+    "sky_blue":        "#56B4E9",
+    "bluish_green":    "#009E73",
+    "yellow":          "#F0E442",
+    "blue":            "#0072B2",
+    "vermillion":      "#D55E00",
+    "reddish_purple":  "#CC79A7",
+    "gray":            "#999999",   # not part of Wong; neutral companion
+}
 
 COLORS = {
     # Vegetation components
-    "woody":             "#5B4A3F",   # Dark brown  (woody biomass)
-    "herbaceous":        "#4CAF50",   # Green        (herbaceous layer)
+    "woody":             WONG["orange"],           # woody biomass
+    "herbaceous":        WONG["bluish_green"],     # herbaceous layer
 
     # Satellite sources
-    "modis":             "#1f77b4",   # Blue
-    "sentinel2":         "#ff7f0e",   # Orange
-    "landsat8":          "#2ca02c",   # Green
-    "venus":             "#d62728",   # Red
-    "planet":            "#9467bd",   # Purple
+    "modis":             WONG["blue"],
+    "sentinel2":         WONG["orange"],
+    "landsat8":          WONG["bluish_green"],
+    "venus":             WONG["vermillion"],
+    "planet":            WONG["reddish_purple"],
 
     # In-situ sensors
-    "nsrs1":             "#8c564b",   # Brown
-    "nsrs2":             "#e377c2",   # Pink
-    "nsrs3_raw":         "#bcbd22",   # Olive / uncorrected
-    "nsrs3_corrected":   "#17becf",   # Teal  / corrected
+    "nsrs1":             WONG["vermillion"],
+    "nsrs2":             WONG["reddish_purple"],
+    "nsrs3_raw":         WONG["gray"],             # uncorrected
+    "nsrs3_corrected":   WONG["black"],            # corrected
 
-    # Phenological markers
-    "sos":               "#FFA500",   # Orange  — Start of Season
-    "pos":               "#FF0000",   # Red     — Peak of Season
-    "eos":               "#800080",   # Purple  — End of Season
+    # Phenological markers (shape also encodes type: ^ SoS, o PoS, v EoS)
+    "sos":               WONG["yellow"],           # Start of Season
+    "pos":               WONG["vermillion"],       # Peak of Season
+    "eos":               WONG["sky_blue"],         # End of Season
 
     # Meteorological
-    "rainfall":          "#4169E1",   # Royal blue
-    "temperature":       "#DC143C",   # Crimson
+    "rainfall":          WONG["sky_blue"],
+    "temperature":       WONG["gray"],
 }
 
 # Mapping from DataFrame column name patterns to COLORS keys.
@@ -155,7 +169,7 @@ def source_color(source_name: str) -> str:
     Examples
     --------
     >>> source_color("MODIS")
-    '#1f77b4'
+    '#0072B2'
     """
     for key, color_key in COLUMN_COLOR_MAP.items():
         if key in source_name:

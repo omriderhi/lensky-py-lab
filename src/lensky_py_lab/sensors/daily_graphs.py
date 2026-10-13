@@ -85,9 +85,11 @@ try:
 except ImportError:
     _HAS_PLOT_CONFIG = False
     COLORS: Dict[str, str] = {
-        "nsrs1": "#e377c2",
-        "nsrs2": "#7f7f7f",
-        "nsrs3_corrected": "#17becf",
+        "nsrs1": "#D55E00",
+        "nsrs2": "#CC79A7",
+        "nsrs3_corrected": "#000000",
+        "woody": "#E69F00",
+        "herbaceous": "#009E73",
     }
 
 # ---------------------------------------------------------------------------
@@ -107,14 +109,14 @@ _BAND_COLS = {
 _NDVI_COLS   = {1: "NDVI_1_Avg", 2: "NDVI_2_Avg", 3: "NDVI_3_Avg"}
 
 _SENSOR_COLORS = {
-    1: COLORS.get("nsrs1",           "#e377c2"),
-    2: COLORS.get("nsrs2",           "#7f7f7f"),
-    3: COLORS.get("nsrs3_corrected", "#17becf"),
+    1: COLORS.get("nsrs1",           "#D55E00"),
+    2: COLORS.get("nsrs2",           "#CC79A7"),
+    3: COLORS.get("nsrs3_corrected", "#000000"),
 }
 
 # Semantic labels and colors matching the original research script
 _SENSOR_LABELS = {1: "Herbaceous", 2: "Woody", 3: "Mixed"}
-_SENSOR_COLORS_SEMANTIC = {1: "green", 2: "brown", 3: "blue"}
+_SENSOR_COLORS_SEMANTIC = {1: COLORS["herbaceous"], 2: COLORS["woody"], 3: "#0072B2"}
 
 # Logger NDVI — pre-computed by Campbell datalogger, used as primary source
 _LOGGER_NDVI_COLS = {1: "NDVI_1_Avg", 2: "NDVI_2_Avg", 3: "NDVI_3_Avg"}
