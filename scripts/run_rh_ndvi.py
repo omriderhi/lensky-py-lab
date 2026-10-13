@@ -98,6 +98,7 @@ from lensky_py_lab.sensors.daily_graphs import (
     load_dat_dir,
 )
 from lensky_py_lab.visualization.figure_generator import (
+    SAVE_DPI,
     plot_decomposition_comparative,
     plot_site_publication,
     save_figure,
@@ -196,7 +197,7 @@ def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = 
         else:
             fig_clean = plot_cleaning_pipeline(source_name, ds.processed)
 
-        fig_clean.savefig(out_cleaning / f"{source_name}.png", dpi=100, bbox_inches="tight")
+        fig_clean.savefig(out_cleaning / f"{source_name}.png", dpi=SAVE_DPI, bbox_inches="tight")
         plt.close(fig_clean)
         print(f"    → {out_cleaning / source_name}.png")
 
@@ -267,7 +268,7 @@ def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = 
 
     # All sources — full time-series (no phenology markers on the main graph)
     fig_all = plot_site("RH_NDVI", site_df)
-    fig_all.savefig(out_final / "RH_NDVI_all_data.png", dpi=150, bbox_inches="tight")
+    fig_all.savefig(out_final / "RH_NDVI_all_data.png", dpi=SAVE_DPI, bbox_inches="tight")
     plt.close(fig_all)
     print(f"  → {out_final / 'RH_NDVI_all_data.png'}")
 
@@ -277,7 +278,7 @@ def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = 
         site_df_nsrs = site_df.loc[nsrs_start:nsrs_end]
         fig_nsrs = plot_site("RH_NDVI (NSRS window)", site_df_nsrs)
         fig_nsrs.savefig(out_final / "RH_NDVI_all_data_focused_on_NSRS.png",
-                         dpi=150, bbox_inches="tight")
+                         dpi=SAVE_DPI, bbox_inches="tight")
         plt.close(fig_nsrs)
         print(f"  → {out_final / 'RH_NDVI_all_data_focused_on_NSRS.png'}")
 
@@ -298,7 +299,7 @@ def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = 
         fig_comp = plot_site(f"RH_NDVI — NSRS vs {sat_name}", sub_df,
                              phenology_df=comp_pheno if (comp_pheno is not None and not comp_pheno.empty) else None)
         out_path = out_comparative / f"RH_NDVI_NSRS_vs_{sat_col}.png"
-        fig_comp.savefig(out_path, dpi=150, bbox_inches="tight")
+        fig_comp.savefig(out_path, dpi=SAVE_DPI, bbox_inches="tight")
         plt.close(fig_comp)
         print(f"  → {out_path.name}")
 
@@ -330,7 +331,7 @@ def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = 
 
     # Data availability chart
     fig_avail = plot_data_availability("RH_NDVI", site_df)
-    fig_avail.savefig(out_final / "RH_NDVI_data_availability.png", dpi=150, bbox_inches="tight")
+    fig_avail.savefig(out_final / "RH_NDVI_data_availability.png", dpi=SAVE_DPI, bbox_inches="tight")
     plt.close(fig_avail)
     print(f"  → {out_final / 'RH_NDVI_data_availability.png'}")
 

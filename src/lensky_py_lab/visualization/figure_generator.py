@@ -39,6 +39,13 @@ try:
         COLORS,
         FIGURE_DPI,
         FIGURE_FORMATS,
+        FONT_SIZE_LEGEND,
+        FONT_SIZE_PANEL_LETTER,
+        FONT_SIZE_TICK_DATE,
+        NSRS_LINESTYLE,
+        NSRS_LINEWIDTH,
+        SATELLITE_LINEWIDTH,
+        SAVE_DPI,
         apply_publication_style,
         source_color,
     )
@@ -48,7 +55,14 @@ try:
 except ImportError:  # pragma: no cover
     _HAS_PLOT_CONFIG = False
     FIGURE_DPI = 300
+    SAVE_DPI = 300
     FIGURE_FORMATS = ["tiff"]
+    FONT_SIZE_LEGEND = 14
+    FONT_SIZE_PANEL_LETTER = 16
+    FONT_SIZE_TICK_DATE = 11
+    NSRS_LINESTYLE = "-"
+    NSRS_LINEWIDTH = 2.8
+    SATELLITE_LINEWIDTH = 1.8
     COLORS: Dict[str, str] = {
         "modis":           "#1f77b4",
         "sentinel2":       "#ff7f0e",
@@ -120,6 +134,17 @@ def save_figure(
         fig.savefig(path, dpi=dpi, bbox_inches="tight")
         saved.append(path)
     return saved
+
+
+def add_panel_letter(ax: plt.Axes, letter: str) -> None:
+    """Place a bold subplot letter (e.g. ``"A"``) in the top-left of *ax*."""
+    ax.text(
+        0.012, 0.97, letter, transform=ax.transAxes,
+        fontsize=FONT_SIZE_PANEL_LETTER, fontweight="bold",
+        ha="left", va="top", zorder=10,
+        bbox=dict(boxstyle="round,pad=0.2", facecolor="white",
+                  edgecolor="none", alpha=0.85),
+    )
 
 
 def add_phenology_markers(
@@ -211,12 +236,14 @@ def plot_site_publication(
     for col in lowess_cols:
         src = col.removeprefix(f"{NDVI_LOWESS_FIELD} ")
         color = source_color(src)
-        linestyle = "--" if src.upper().startswith("NSRS") else "-"
+        is_nsrs = src.upper().startswith("NSRS")
         dates_plot, vals_plot = dense_interpolate_with_gaps(
             ts_unix, site_df[col].values, WIDE_GAP_SECONDS
         )
         ax.plot(dates_plot, vals_plot, label=src, color=color,
-                linewidth=2.0, linestyle=linestyle)
+                linewidth=NSRS_LINEWIDTH if is_nsrs else SATELLITE_LINEWIDTH,
+                linestyle=NSRS_LINESTYLE if is_nsrs else "-",
+                zorder=4 if is_nsrs else 3)
 
     # Phenology markers — drawn before legend so they appear in it
     if phenology_df is not None and not phenology_df.empty:
@@ -225,7 +252,7 @@ def plot_site_publication(
     ax.set_ylabel("NDVI", fontsize=12)
     ax.set_xlabel("Date", fontsize=12)
     ax.set_title(f"{site_name} — NDVI Time Series", fontsize=14, fontweight="bold")
-    ax.legend(loc="upper left", fontsize=9, framealpha=0.9)
+    ax.legend(loc="upper left", fontsize=FONT_SIZE_LEGEND, framealpha=0.9)
     _format_date_axis(ax)
 
     if has_rain:
@@ -238,7 +265,7 @@ def plot_site_publication(
                 width=5, label="Rainfall (mm)", zorder=0)
         ax2.invert_yaxis()
         ax2.set_ylabel("Rainfall (mm)", fontsize=10)
-        ax2.legend(loc="upper right", fontsize=9)
+        ax2.legend(loc="upper right", fontsize=FONT_SIZE_LEGEND)
 
     if has_temp:
         ax3 = ax.twinx()
@@ -251,7 +278,7 @@ def plot_site_publication(
                  color=COLORS.get("temperature", "red"),
                  linewidth=1.2, linestyle=":", label="Temp (°C)")
         ax3.set_ylabel("Temperature (°C)", fontsize=10)
-        ax3.legend(loc="lower right", fontsize=9)
+        ax3.legend(loc="lower right", fontsize=FONT_SIZE_LEGEND)
 
     fig.tight_layout()
 
@@ -369,7 +396,7 @@ def plot_decomposition_comparative(
     fig, axes = plt.subplots(3, 1, figsize=figsize or (18, 12), sharex=True)
     ts_unix = site_df.index.values
 
-    for ax, panel in zip(axes, panels):
+    for ax, panel, letter in zip(axes, panels, "ABC"):
         # Satellite / decomposed component
         sat_s = panel["sat_series"]
         if sat_s is not None and not sat_s.dropna().empty:
@@ -379,7 +406,7 @@ def plot_decomposition_comparative(
             )
             ax.plot(dates_plot, vals_plot,
                     label=panel["sat_label"], color=panel["sat_color"],
-                    linewidth=2.2, linestyle="-")
+                    linewidth=SATELLITE_LINEWIDTH, linestyle="-", zorder=3)
 
         # NSRS sensor
         nsrs_col = panel["nsrs_col"]
@@ -389,16 +416,19 @@ def plot_decomposition_comparative(
             )
             ax.plot(dates_nsrs, vals_nsrs,
                     label=panel["nsrs_label"], color=panel["nsrs_color"],
-                    linewidth=1.8, linestyle="--")
+                    linewidth=NSRS_LINEWIDTH, linestyle=NSRS_LINESTYLE, zorder=4)
         else:
             ax.text(0.5, 0.5, f"{nsrs_col} not available",
                     transform=ax.transAxes, ha="center", va="center",
                     fontsize=9, color="gray")
 
-        ax.set_ylabel(panel["ylabel"], fontsize=11)
-        ax.set_title(panel["title"], fontsize=11, fontweight="bold")
-        ax.legend(loc="upper left", fontsize=9, framealpha=0.9)
+        ax.set_ylabel(panel["ylabel"])
+        ax.set_title(panel["title"])
+        ax.legend(loc="upper right", fontsize=FONT_SIZE_LEGEND, framealpha=0.9)
+        add_panel_letter(ax, letter)
         _format_date_axis(ax)
+
+    _equalize_y_span(axes[1:])
 
     fig.suptitle(
         f"{site_name} — {satellite_name} woody/herbaceous decomposition vs NSRS",
@@ -407,10 +437,8 @@ def plot_decomposition_comparative(
     fig.tight_layout()
 
     if output_dir is not None:
-        out = Path(output_dir)
-        out.mkdir(parents=True, exist_ok=True)
-        path = out / f"{satellite_name}_decomposition_vs_NSRS.png"
-        fig.savefig(path, dpi=150, bbox_inches="tight")
+        save_figure(fig, output_dir, f"{satellite_name}_decomposition_vs_NSRS",
+                    dpi=SAVE_DPI)
 
     return fig
 
@@ -420,7 +448,20 @@ def plot_decomposition_comparative(
 # ---------------------------------------------------------------------------
 
 
+def _equalize_y_span(axes) -> None:
+    """Give *axes* the same y-axis span (largest current span), each centred on its own data.
+
+    Tick spacing is then directly comparable between panels even when the
+    panels have different offsets (e.g. woody NDVI vs herbaceous ΔNDVI).
+    """
+    limits = [ax.get_ylim() for ax in axes]
+    span = max(hi - lo for lo, hi in limits)
+    for ax, (lo, hi) in zip(axes, limits):
+        mid = (lo + hi) / 2
+        ax.set_ylim(mid - span / 2, mid + span / 2)
+
+
 def _format_date_axis(ax: plt.Axes) -> None:
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m"))
     ax.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
-    plt.setp(ax.get_xticklabels(), rotation=45, ha="right", fontsize=9)
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right", fontsize=FONT_SIZE_TICK_DATE)

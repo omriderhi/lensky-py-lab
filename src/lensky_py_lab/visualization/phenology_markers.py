@@ -29,9 +29,18 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 try:
-    from plot_config import COLORS, source_color  # type: ignore[import]
+    from plot_config import (  # type: ignore[import]
+        COLORS,
+        PHENO_MARKER_EDGE_COLOR,
+        PHENO_MARKER_EDGE_WIDTH,
+        PHENO_MARKER_SIZE,
+        source_color,
+    )
 except ImportError:  # pragma: no cover
     COLORS: Dict[str, str] = {"sos": "#FFA500", "pos": "#FF0000", "eos": "#800080"}
+    PHENO_MARKER_SIZE = 220
+    PHENO_MARKER_EDGE_WIDTH = 2.0
+    PHENO_MARKER_EDGE_COLOR = "black"
 
     def source_color(name: str) -> str:  # type: ignore[misc]
         return "#333333"
@@ -63,9 +72,9 @@ def draw_phenology_markers(
 ) -> None:
     """Scatter SoS / PoS / EoS points at ``(event_date, event_value)``.
 
-    Marker fill colour encodes the event type (SoS/PoS/EoS); marker edge
-    colour encodes the data source (matching the NDVI curve colour). One
-    legend entry per marker type actually drawn is added.
+    Marker fill colour encodes the event type (SoS/PoS/EoS); the edge is a
+    constant high-contrast colour so markers stand out against any curve.
+    One legend entry per marker type actually drawn is added.
 
     Parameters
     ----------
@@ -97,8 +106,6 @@ def draw_phenology_markers(
     drawn_types: set = set()
 
     for _, row in df.iterrows():
-        sat = str(row.get("satellite", ""))
-        edge_color = source_color(sat)
         for marker, col_date, col_val in _DATE_VAL:
             date_raw = row.get(col_date)
             val = row.get(col_val)
@@ -113,13 +120,15 @@ def draw_phenology_markers(
                 date, val,
                 color=PHENOLOGY_COLORS[marker],
                 marker=_PHENO_SHAPES[marker],
-                s=80, zorder=5,
-                edgecolors=edge_color, linewidths=1.5,
+                s=PHENO_MARKER_SIZE, zorder=6,
+                edgecolors=PHENO_MARKER_EDGE_COLOR,
+                linewidths=PHENO_MARKER_EDGE_WIDTH,
             )
             drawn_types.add(marker)
 
     for marker in ["SoS", "PoS", "EoS"]:
         if marker in drawn_types:
             ax.scatter([], [], color=PHENOLOGY_COLORS[marker],
-                       marker=_PHENO_SHAPES[marker], s=80,
-                       edgecolors="black", linewidths=1.5, label=marker)
+                       marker=_PHENO_SHAPES[marker], s=PHENO_MARKER_SIZE,
+                       edgecolors=PHENO_MARKER_EDGE_COLOR,
+                       linewidths=PHENO_MARKER_EDGE_WIDTH, label=marker)

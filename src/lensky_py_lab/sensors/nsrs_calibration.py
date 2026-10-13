@@ -251,7 +251,7 @@ def create_calibration_figure(
     ax_ts.plot(dates["nsrs2"],     nsrs2.values,             color=COLORS["nsrs2"],
                label="NSRS_2", linewidth=1.8)
     ax_ts.plot(dates["raw"],       nsrs3_raw.values,         color=COLORS["nsrs3_raw"],
-               label="NSRS_3 raw", linewidth=1.5, linestyle="--", alpha=0.8)
+               label="NSRS_3 raw", linewidth=1.8, alpha=0.85)
     ax_ts.plot(dates["corrected"], nsrs3_corrected.values,   color=COLORS["nsrs3_corrected"],
                label=f"NSRS_3 corrected (×{factor})", linewidth=1.8)
     ax_ts.set_title("A — Time Series Comparison")
@@ -395,7 +395,7 @@ def _scatter_with_stats(
     ax.set_title(title)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
-    ax.legend(fontsize=9)
+    ax.legend(fontsize=plt.rcParams["legend.fontsize"])
     ax.set_xlim(lo - 0.02, hi + 0.02)
     ax.set_ylim(lo - 0.02, hi + 0.02)
 

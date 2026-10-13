@@ -75,8 +75,25 @@ COLUMN_COLOR_MAP = {
 FONT_SIZE_TITLE      = 16
 FONT_SIZE_LABEL      = 13
 FONT_SIZE_TICK       = 11
-FONT_SIZE_LEGEND     = 11
+FONT_SIZE_LEGEND     = 14
 FONT_SIZE_ANNOTATION = 10
+FONT_SIZE_TICK_DATE  = 11
+FONT_SIZE_PANEL_LETTER = 16
+
+# ---------------------------------------------------------------------------
+# Line and marker styling (reviewer round v12: NSRS lines and phenology
+# markers must be clearly visible)
+# ---------------------------------------------------------------------------
+
+NSRS_LINESTYLE         = "-"
+NSRS_LINEWIDTH         = 2.8
+SATELLITE_LINEWIDTH    = 1.8
+
+PHENO_MARKER_SIZE       = 220
+PHENO_MARKER_EDGE_WIDTH = 2.0
+PHENO_MARKER_EDGE_COLOR = "black"
+
+SAVE_DPI = FIGURE_DPI
 
 # ---------------------------------------------------------------------------
 # Matplotlib rcParams block
