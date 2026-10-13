@@ -274,6 +274,14 @@ def _extract_markers(series: pd.Series, factor: float = 0.2) -> Optional[Dict]:
     may not follow the same ordering for Mediterranean seasons where the peak
     falls in January (DOY ≈ 15) while SoS falls in autumn (DOY ≈ 280).
 
+    The Savitzky-Golay-smoothed curve is used only to *locate* each event
+    (peak index, threshold crossings) robustly. The *value* reported for
+    every marker is read back from the plain linearly-interpolated curve
+    (``interp_fn``) at that timestamp, matching the curve that gets drawn by
+    ``dense_interpolate_with_gaps`` in the plotting layer — otherwise PoS
+    would be reported from the smoothed curve while SoS/EoS come from the
+    unsmoothed one, and the markers would not land on the plotted line.
+
     Parameters
     ----------
     series : pd.Series
@@ -315,16 +323,18 @@ def _extract_markers(series: pd.Series, factor: float = 0.2) -> Optional[Dict]:
     except Exception:
         smooth = vals_daily
 
-    # PoS
+    # PoS — located on the smoothed curve, but its value is read back from
+    # the unsmoothed interpolant so it matches the plotted LOWESS curve.
     pos_idx = int(np.argmax(smooth))
-    pos_value = float(smooth[pos_idx])
     pos_ts = float(ts_daily[pos_idx])
 
-    # Base = mean of left and right minima
-    left_min = float(smooth[: pos_idx + 1].min()) if pos_idx > 0 else pos_value
-    right_min = float(smooth[pos_idx:].min()) if pos_idx < n - 1 else pos_value
+    # Base = mean of left and right minima (on the smoothed curve, used only
+    # for locating threshold crossings — not reported as a marker value)
+    smooth_pos_value = float(smooth[pos_idx])
+    left_min = float(smooth[: pos_idx + 1].min()) if pos_idx > 0 else smooth_pos_value
+    right_min = float(smooth[pos_idx:].min()) if pos_idx < n - 1 else smooth_pos_value
     base_value = (left_min + right_min) / 2.0
-    amplitude = pos_value - base_value
+    amplitude = smooth_pos_value - base_value
 
     if amplitude <= 0:
         return None
@@ -350,8 +360,12 @@ def _extract_markers(series: pd.Series, factor: float = 0.2) -> Optional[Dict]:
     def _ts_to_doy(ts: float) -> int:
         return _ts_to_date(ts).dayofyear
 
-    sos_value = float(interp_fn(sos_ts).clip(vals_arr.min() - 0.05, vals_arr.max() + 0.05))
-    eos_value = float(interp_fn(eos_ts).clip(vals_arr.min() - 0.05, vals_arr.max() + 0.05))
+    def _value_at(ts: float) -> float:
+        return float(interp_fn(ts).clip(vals_arr.min() - 0.05, vals_arr.max() + 0.05))
+
+    sos_value = _value_at(sos_ts)
+    pos_value = _value_at(pos_ts)
+    eos_value = _value_at(eos_ts)
 
     return {
         "SoS_date":  _ts_to_date(sos_ts),
