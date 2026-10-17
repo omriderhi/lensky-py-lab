@@ -18,7 +18,7 @@ The original JS script uses:
   Sentinel-2 → COPERNICUS/S2_SR with CLOUD_COVERAGE_ASSESSMENT < 10.
               Python uses the harmonised collection (S2_SR_HARMONIZED) which
               is preferred for long time-series (corrects the 2022 processing
-              baseline shift); cloud property is CLOUDY_PIXEL_PERCENTAGE.
+              baseline shift); cloud property stays CLOUD_COVERAGE_ASSESSMENT as in the script.
 
   Landsat-8  → LANDSAT/LC08/C01/T1_SR with CLOUD_COVER < 10.
               Python uses Collection-2 (C02/T1_L2) which is the current USGS
@@ -66,7 +66,7 @@ _COLLECTIONS: Dict[SatelliteSource, str] = {
 #: Pre-filter: (image-property name, maximum value).
 #: Matches script: CLOUD_COVERAGE_ASSESSMENT < 10 for S2, CLOUD_COVER < 10 for L8.
 _CLOUD_FILTER: Dict[SatelliteSource, tuple] = {
-    SatelliteSource.SENTINEL2: ("CLOUDY_PIXEL_PERCENTAGE", 10),
+    SatelliteSource.SENTINEL2: ("CLOUD_COVERAGE_ASSESSMENT", 10),
     SatelliteSource.LANDSAT8:  ("CLOUD_COVER", 10),
 }
 
@@ -127,7 +127,12 @@ class GEEClient:
                 "Install it with: pip install earthengine-api  "
                 "or: pip install 'lensky-py-lab[gee]'"
             )
-        _ee.Initialize(project=project, credentials=credentials)
+        # credentials=None means "no credentials" to ee.Initialize; the stored
+        # `earthengine authenticate` login is selected by 'persistent'.
+        _ee.Initialize(
+            project=project,
+            credentials="persistent" if credentials is None else credentials,
+        )
         self._ee = _ee
 
     # ------------------------------------------------------------------
@@ -143,6 +148,7 @@ class GEEClient:
         scale: Optional[int] = None,
         ndvi_min: Optional[float] = _NDVI_MIN_DEFAULT,
         cloud_pct_max: Optional[float] = None,
+        collection: Optional[str] = None,
     ) -> pd.DataFrame:
         """Compute mean NDVI over *geometry* for each image in *source*.
 
@@ -166,6 +172,9 @@ class GEEClient:
                 matches the JS script's ``maskLowValues`` function.
             cloud_pct_max: Override the per-source cloud percentage
                 threshold. Defaults to 10 % for S2 and L8 (as in the script).
+            collection: Override the GEE asset ID (e.g. ``"MODIS/006/MOD09GQ"``
+                to reproduce the research script instead of the default
+                Collection 6.1). The band names must match *source*.
 
         Returns:
             DataFrame indexed by unix timestamp (``TS``) with one column
@@ -183,7 +192,7 @@ class GEEClient:
         effective_scale = scale if scale is not None else _DEFAULT_SCALE[source]
 
         collection = (
-            ee.ImageCollection(_COLLECTIONS[source])
+            ee.ImageCollection(collection or _COLLECTIONS[source])
             .filterDate(start_str, end_str)
             .filterBounds(geometry)
         )

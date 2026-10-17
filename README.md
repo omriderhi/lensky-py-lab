@@ -49,6 +49,14 @@ All scripts read data paths from environment variables — no hardcoded local pa
 | `RH_DAT_DIR` | Optional | Directory with raw Campbell `.dat` logger files (for intra-day NSRS figures) |
 | `DAILY_GRAPHS_EXCEL` | Optional | Path to `daily_graphsxlsx.xlsx` (4-sheet intra-day workbook, alternative to `.dat`) |
 | `RESEARCH_DATA_ROOT` | Optional | Root of the local research data tree (used by `_gen_local_notebook.py` only) |
+| `GEE_PROJECT` | Optional | Google Earth Engine Cloud project, needed only to re-extract satellite series (`--extract`, `scripts/pull_gee_data.py`) |
+
+**Re-extracting satellite data from Google Earth Engine** (optional; MODIS, S2, L8 only): choose per run which sources to pull again, the rest are read from the local CSVs.
+```
+python scripts/run_rh_ndvi.py --extract S2,L8 --gee-project <project>     # or: --extract all
+python scripts/pull_gee_data.py --sources MODIS --modis-collection 006    # extraction only, no analysis
+```
+The chosen sources' CSVs in `RH_DATA_DIR` are **overwritten** (they are tracked in git, so `git diff` shows the change) and the extraction is recorded in `gee_extraction_log.json` next to them. Details, default windows and the MODIS collection choice: `docs/features/gee-extraction.md`.
 
 **PyCharm run configuration** — paste into *Environment variables* field:
 ```
@@ -125,10 +133,13 @@ filter settings or on any result:
 |---|---|
 | `min_valid_dates` — distinct valid observation dates in the window | 40 |
 | `min_month_coverage` — fraction of months in the window with at least one valid observation | 0.60 |
+| `min_peak_season_dates` — distinct valid dates in each complete peak season (1 Dec – 31 Mar) inside the window | 5 |
 
 All rules must hold. The thresholds are judgment calls set after the RH data had been seen: S2 passes
-narrowly (45 dates, 0.65 coverage) and L8 fails narrowly (32 dates, 0.58). Report them in the Methods, and
-change them only with a reason.
+(64 dates, 0.89 coverage, 8 and 11 dates in the two winters); L8 (re-extracted Collection 2) passes the first two rules (42 dates, 0.77)
+but fails the peak-season rule (2 and 3 dates in the two winters, against MODIS 59 and 79): the < 10 % cloud filter leaves almost no winter
+scenes, so its curve misses the seasonal peak. The peak-season rule and its threshold were added after those counts were seen. Report the
+rules in the Methods, and change them only with a reason.
 
 ```python
 from lensky_py_lab.pipeline.eligibility import EligibilityRules, evaluate_eligibility

@@ -49,4 +49,23 @@ def test_rules_configurable_and_evaluate_uses_reference_window():
     assert reference_window(ref) == (T0, T1)
     sat = {"A": _Src(_proc(pd.date_range("2020-01-01", "2021-12-31", freq="40D")))}
     assert not evaluate_eligibility(sat, ref).loc[0, "eligible"]
-    assert evaluate_eligibility(sat, ref, EligibilityRules(min_valid_dates=10, min_month_coverage=0.5)).loc[0, "eligible"]
+    relaxed = EligibilityRules(min_valid_dates=10, min_month_coverage=0.5, min_peak_season_dates=0)
+    assert evaluate_eligibility(sat, ref, relaxed).loc[0, "eligible"]
+
+
+def test_peak_season_rule_catches_winter_gap_despite_enough_dates_and_months():
+    # 45 dates, every month covered, but almost nothing in Dec-Mar of the complete winter 2020/21
+    d = [x for x in pd.date_range("2020-01-01", "2021-12-31", freq="5D")
+         if not (pd.Timestamp("2020-12-01") <= x <= pd.Timestamp("2021-03-31")) or x.day == 1 and x.month in (1, 3)]
+    row = check_source_eligibility("W", _proc(d), (T0, T1), EligibilityRules(min_valid_dates=40, min_month_coverage=0.6))
+    assert row["valid_dates_in_window"] >= 40 and row["month_coverage"] >= 0.6
+    assert row["min_dates_in_peak_season"] < 5 and not row["eligible"]
+    assert "peak season" in row["reasons"]
+    assert check_source_eligibility("W", _proc(d), (T0, T1), EligibilityRules(min_peak_season_dates=0))["eligible"]
+
+
+def test_peak_season_rule_skipped_without_a_complete_winter_in_window():
+    short = (int(pd.Timestamp("2020-04-01").timestamp()), int(pd.Timestamp("2020-11-30").timestamp()))
+    df = _proc(pd.date_range("2020-04-01", "2020-11-30", freq="2D"))
+    row = check_source_eligibility("S", df, short)
+    assert row["min_dates_in_peak_season"] is None and row["eligible"]

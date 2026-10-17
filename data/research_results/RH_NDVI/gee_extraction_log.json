@@ -1,0 +1,64 @@
+{
+  "L8": {
+    "cloud_filter": "CLOUD_COVER < 10",
+    "code_commit": "41f142d",
+    "collection": "LANDSAT/LC08/C02/T1_L2",
+    "comparison_with_previous_file": {
+      "bias_new_minus_old": 0.0,
+      "max_abs_diff": 0.0005,
+      "new_dates_with_value": 70,
+      "only_in_new": 0,
+      "only_in_previous": 0,
+      "previous_dates_with_value": 70,
+      "previous_file": true,
+      "rmse": 0.0003,
+      "shared_dates": 70,
+      "shared_dates_identical": 70
+    },
+    "extracted_utc": "2026-10-17T13:15:57Z",
+    "file": "L8.csv",
+    "gee_source": "L8",
+    "ndvi_min_mask": 0.35,
+    "point_lon_lat": [
+      34.946667,
+      32.555806
+    ],
+    "reducer_scale_m": 30,
+    "rows": 97,
+    "window": [
+      "2019-01-01",
+      "2021-12-05"
+    ]
+  },
+  "S2": {
+    "cloud_filter": "CLOUD_COVERAGE_ASSESSMENT < 10",
+    "code_commit": "41f142d",
+    "collection": "COPERNICUS/S2_SR_HARMONIZED",
+    "comparison_with_previous_file": {
+      "bias_new_minus_old": 0.0,
+      "max_abs_diff": 0.0005,
+      "new_dates_with_value": 107,
+      "only_in_new": 0,
+      "only_in_previous": 0,
+      "previous_dates_with_value": 107,
+      "previous_file": true,
+      "rmse": 0.0003,
+      "shared_dates": 107,
+      "shared_dates_identical": 107
+    },
+    "extracted_utc": "2026-10-17T13:15:57Z",
+    "file": "S2.csv",
+    "gee_source": "S2",
+    "ndvi_min_mask": 0.35,
+    "point_lon_lat": [
+      34.946667,
+      32.555806
+    ],
+    "reducer_scale_m": 10,
+    "rows": 107,
+    "window": [
+      "2019-01-01",
+      "2021-12-05"
+    ]
+  }
+}

@@ -45,6 +45,7 @@ All data paths are configured via environment variables — no hardcoded local p
 | `RH_DAT_DIR` | Directory with raw Campbell `.dat` files (optional) |
 | `DAILY_GRAPHS_EXCEL` | Path to `daily_graphsxlsx.xlsx` (optional) |
 | `RESEARCH_DATA_ROOT` | Root of local research data tree (`_gen_local_notebook.py` only) |
+| `GEE_PROJECT` | GEE Cloud project for `--extract` / `pull_gee_data.py` (optional) |
 
 ## Architecture
 
@@ -85,6 +86,7 @@ Scripts in `scripts/`:
 - `run_rh_ndvi.py` — full RH_NDVI pipeline (steps 1–11)
 - `example_rh_ndvi.py` — minimal end-to-end example
 - `run_daily_graphs.py` — standalone intra-day NSRS figures from `.dat` files
+- `pull_gee_data.py` — re-extract MODIS / S2 / L8 from GEE into the data CSVs (same as `run_rh_ndvi.py --extract`); `io/gee_extract.py` holds the logic, overwrites the chosen CSVs and logs provenance in `gee_extraction_log.json`; MODIS defaults to collection 006 (reproduces the published file), 061 selectable; see `docs/features/gee-extraction.md`
 - `fov_canopy_fraction.py` — share of the NSRS_3 signal coming from the crown (reviewer [18]); defaults are placeholders and the script says so when used
 - `_gen_local_notebook.py` — one-off: generates a local copy of the archive notebook
 
@@ -114,7 +116,7 @@ Scripts in `scripts/`:
 
 ## Source eligibility and duplicates
 
-- `pipeline/eligibility.py`: a satellite takes part in phenology / decomposition / comparative figures only if it has ≥ 40 valid dates inside the NSRS window and valid data in ≥ 60 % of its months (measured after the extreme filter, before the outlier filter). `run_rh_ndvi.py --eligibility enforce|report`, `--exclude <SOURCE>`; verdicts in `source_eligibility.csv`. Excluded sources stay in the data-availability chart ("(excluded)"). Current RH verdicts: MODIS and S2 pass (S2 narrowly), L8 fails (32 dates, coverage 0.58). Thresholds are judgment calls — see README.
+- `pipeline/eligibility.py`: a satellite takes part in phenology / decomposition / comparative figures only if it has ≥ 40 valid dates inside the NSRS window and valid data in ≥ 60 % of its months, and ≥ 5 valid dates in each complete 1 Dec–31 Mar inside that window (measured after the extreme filter, before the outlier filter). `run_rh_ndvi.py --eligibility enforce|report`, `--exclude <SOURCE>`; verdicts in `source_eligibility.csv`. Excluded sources stay in the data-availability chart ("(excluded)"). Current RH verdicts: MODIS and S2 pass (S2: 64 dates, coverage 0.89); L8 (re-extracted C02) passes the first two rules (42 dates, 0.77) but fails the peak-season rule (2 and 3 winter dates vs MODIS 59 / 79, S2 8 / 11), so it is excluded by rule; the rule and its threshold were set after seeing those counts. Data products, extraction methods and current numbers for the paper: `docs/features/satellite-data-products.md`. Thresholds are judgment calls — see README.
 - `SourceConfig.average_same_date` averages rows sharing a timestamp at load (L8: one overpass exported as two adjacent-row scenes). On for L8 in `run_rh_ndvi.py`.
 - `SourceConfig.outlier_window_days` / `outlier_direction` select the calendar-window, optionally downward-only outlier filter (`filter_outliers_time_window`). Not used by the research config; the planned satellite default after hand-over. S2 uses a raised `outlier_min_threshold` (0.08) instead. See `docs/features/satellite-data-cleaning-audit-report.md`.
 
@@ -145,6 +147,7 @@ All outputs go to `data/results/` (gitignored — regenerate by running `run_rh_
 |---|---|---|
 | Calibration validation (4-panel) | `figures/calibration/NSRS3_calibration_validation.png` | PNG |
 | Site time-series | `figures/final/<site>_timeseries.png` | PNG |
+| Satellite + NSRS + IMS publication (MODIS, S2) | `figures/final/RH_NDVI_<sat>_vs_NSRS_timeseries.png` | PNG |
 | Comparative (NSRS vs satellite) | `figures/comparative/<site>_NSRS_vs_<sat>.png` | PNG |
 | Data-cleaning pipeline | `figures/data_cleaning/<site>/<source>.png` | PNG |
 | Daily intra-day NDVI | `figures/daily_graphs/*.png` | PNG |
