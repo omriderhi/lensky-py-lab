@@ -115,8 +115,11 @@ from lensky_py_lab.visualization.orientation_map import (
 NOTEBOOK_CONFIGS: dict = {
     # Satellite sources
     "MODIS":    {"min": False,  "max": 0.8,   "outlier_window": 7, "images_per_month": 30},
-    "S2":       {"min": 0.4,    "max": False,  "outlier_window": 7, "images_per_month": 5},
-    "L8":       {"min": 0.4,    "max": False,  "outlier_window": 7, "images_per_month": 4},
+    # S2/L8 use a higher outlier floor (NDVI units): the default 0.02 was set for daily ground
+    # sensors and removes real peaks from sparse series. See
+    # docs/features/satellite-data-cleaning-audit-report.md (Decision).
+    "S2":       {"min": 0.4,    "max": False,  "outlier_window": 7, "outlier_min_threshold": 0.08, "images_per_month": 5},
+    "L8":       {"min": 0.4,    "max": False,  "outlier_window": 7, "outlier_min_threshold": 0.10, "images_per_month": 4},
     # Ground sensors
     "NSRS_1":   {"min": 0.2,    "max": False,  "outlier_window": 7,   "images_per_month": 30},
     "NSRS_2":   {"min": 0.2,    "max": False,  "outlier_window": 7,   "images_per_month": 30},

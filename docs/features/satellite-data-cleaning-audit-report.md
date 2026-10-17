@@ -91,6 +91,29 @@ Woody / Herbaceous rows: MAE 0.35–0.45 (herbaceous), r negative for S2/L8 wood
 - MODIS, S2, L8 (if recommendation adopted): "Values outside [min, max] (MODIS ≤ 0.8; S2, L8 ≥ 0.4) were discarded. An observation was additionally removed when it lay more than max(3 × 1.4826 × MAD, 0.02) **below** the median of all observations within ±15 days (MAD over ±90 days); high values were retained because cloud and atmospheric contamination lower NDVI. The series was then smoothed with LOWESS."
 - If the current code is kept for the satellites, the text must say 7 *observations* (≈ 1 week for MODIS, ≈ 5–6 weeks for S2/L8), and that this removes the highest L8 values.
 
+## Config-only alternative: per-source threshold floor (`scripts/audit/floor_variant.py`)
+
+The observation-window filter with a higher `outlier_min_threshold` for the sparse sources (MODIS 0.02 unchanged, S2 0.08, L8 0.10; window 7, k 3).
+Larger windows make the L8 problem worse (window 11/15 remove 6–7 of the 7 highest observations); the floor is the effective lever
+(L8 window 7: floor 0.02 removes 15 points, 0.08 removes 3, 0.10 removes 2). Outputs: `floor_phenology.csv`, `floor_table4.csv`, `floor_direct.csv`.
+
+PoS value (A = current, F = floor, C = ±15 d downward-only, D = none):
+
+| | A | F | C | D |
+|---|---|---|---|---|
+| MODIS 2018–22 | = | identical to A | within ±0.004 | within ±0.004 |
+| S2 2019 / 2020 / 2021 | 0.707 / 0.704 / 0.800 | 0.743 / 0.705 / 0.800 | 0.743 / 0.704 / 0.800 | 0.743 / 0.706 / 0.797 |
+| L8 2019 / 2020 / 2021 | 0.669 / 0.599 / 0.743 | 0.724 / **0.642** / 0.772 | 0.724 / 0.734 / 0.771 | 0.724 / 0.734 / 0.771 |
+
+Agreement with NSRS: S2 RMSE 0.077 (A) → 0.072 (F), r 0.919 → 0.931; Table 4 Full signal MAE 0.061 → 0.058, r 0.908 → 0.938. L8 RMSE is 0.059 for A, F and D (n 11–17: not resolvable);
+Table 4 Full signal r 0.979 (A, n 11) → 0.912 (F, n 14). MODIS identical. S2/L8 SoS/EoS dates still move between variants (e.g. L8 2020 SoS day 265 vs 303; S2 2020 EoS day 136 vs 152).
+The floor recovers the S2 and L8 2019/2021 peaks but **still removes the L8 2020-03-07 peak (0.642 vs 0.734)**. The floors are tuned to this site.
+
+## Decision
+
+- **Now (research hand-over):** keep the **floor option**. `scripts/run_rh_ndvi.py` sets `outlier_min_threshold` to 0.08 (S2) and 0.10 (L8); MODIS and NSRS are unchanged. The Methods text should state window = 7 observations, floors as above, and that they were chosen from the sensitivity analysis. Known limitation: one L8 peak (2020) is still removed.
+- **Future (after the research is handed over):** move the satellites to the **downward-only, calendar-window** filter (`outlier_window_days=15, outlier_direction="down"`, already implemented). It is independent of observation cadence and cannot remove a peak. Literature support is for the premise (clouds and atmosphere lower NDVI: Holben 1986, Viovy et al. 1992, Chen et al. 2004, TIMESAT), read at abstract/secondary level only; the specific median/MAD rule is this project's design, not a published method.
+
 ## Manuscript cells / sentences affected by the recommendation (to be checked against the .docx by the author; I did not open it)
 
 - Section 2.4.1: replace the single "sliding-window" description by the per-group text above.
