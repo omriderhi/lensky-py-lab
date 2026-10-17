@@ -45,6 +45,7 @@ All data paths are configured via environment variables — no hardcoded local p
 | `RH_DAT_DIR` | Directory with raw Campbell `.dat` files (optional) |
 | `DAILY_GRAPHS_EXCEL` | Path to `daily_graphsxlsx.xlsx` (optional) |
 | `RESEARCH_DATA_ROOT` | Root of local research data tree (`_gen_local_notebook.py` only) |
+| `GEE_PROJECT` | GEE Cloud project for `--extract` / `pull_gee_data.py` (optional) |
 
 ## Architecture
 
@@ -85,6 +86,7 @@ Scripts in `scripts/`:
 - `run_rh_ndvi.py` — full RH_NDVI pipeline (steps 1–11)
 - `example_rh_ndvi.py` — minimal end-to-end example
 - `run_daily_graphs.py` — standalone intra-day NSRS figures from `.dat` files
+- `pull_gee_data.py` — re-extract MODIS / S2 / L8 from GEE into the data CSVs (same as `run_rh_ndvi.py --extract`); `io/gee_extract.py` holds the logic, overwrites the chosen CSVs and logs provenance in `gee_extraction_log.json`; MODIS defaults to collection 006 (reproduces the published file), 061 selectable; see `docs/features/gee-extraction.md`
 - `fov_canopy_fraction.py` — share of the NSRS_3 signal coming from the crown (reviewer [18]); defaults are placeholders and the script says so when used
 - `_gen_local_notebook.py` — one-off: generates a local copy of the archive notebook
 

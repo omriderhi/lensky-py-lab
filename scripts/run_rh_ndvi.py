@@ -14,6 +14,9 @@ Usage:
     # Override data directories:
     python scripts/run_rh_ndvi.py --data-dir path/to/RH_NDVI --ims-dir path/to/IMS
 
+    # Re-extract chosen satellite series from Google Earth Engine first (overwrites their CSVs):
+    python scripts/run_rh_ndvi.py --extract S2,L8 --gee-project <project>   # or: --extract all
+
     # Provide a directory containing raw Campbell .dat files for intra-day figures:
     python scripts/run_rh_ndvi.py --dat-dir path/to/dat_files/
 
@@ -87,6 +90,7 @@ from lensky_py_lab.phenology.phenolopy_integration import (
     decompose_woody_herbaceous,
     extract_phenology,
 )
+from lensky_py_lab.io.gee_extract import parse_sources
 from lensky_py_lab.pipeline.eligibility import evaluate_eligibility
 from lensky_py_lab.plotting.plotter import plot_cleaning_pipeline, plot_site, plot_data_availability
 from lensky_py_lab.sensors.nsrs_calibration import (
@@ -147,14 +151,19 @@ _NSRS_BASE_NAMES = {k for k in NOTEBOOK_CONFIGS if k.startswith("NSRS") and not 
 
 def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = None,
         nsrs3_factor: str = "auto", eligibility: str = "enforce",
-        exclude: tuple = ()) -> None:
+        exclude: tuple = (), extract: tuple = (), gee_project: Optional[str] = None,
+        modis_collection: str = "006", force_extract: bool = False) -> None:
     """``nsrs3_factor``: ``"auto"`` derives the NSRS_3 factor from the data,
     ``"none"`` leaves NSRS_3 uncalibrated, a number applies that fixed factor.
 
     ``eligibility``: ``"enforce"`` leaves satellites that fail the data-sufficiency rules
     (``lensky_py_lab.pipeline.eligibility``) out of the analysis; ``"report"`` only writes
     the verdicts. ``exclude`` names sources to leave out regardless. Excluded sources are
-    still processed and still shown in the data-availability chart."""
+    still processed and still shown in the data-availability chart.
+
+    ``extract`` names satellite sources (MODIS, S2, L8) to re-extract from Google Earth Engine
+    before the run: their CSVs in ``data_dir`` are overwritten (provenance goes to
+    ``gee_extraction_log.json``); every other source is read from the local CSVs."""
     # ── output sub-directories ───────────────────────────────────────────────
     out_cleaning      = out_dir / "figures" / "data_cleaning" / "RH_NDVI"
     out_final         = out_dir / "figures" / "final"
@@ -166,6 +175,25 @@ def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = 
     for d in (out_cleaning, out_final, out_comparative, out_decomposition,
               out_calib, out_daily, out_orientation):
         d.mkdir(parents=True, exist_ok=True)
+
+    # ── Step 0 (optional): re-extract chosen satellite series from GEE ───────
+    if extract:
+        if not gee_project:
+            raise SystemExit("--extract needs a GEE project (--gee-project or GEE_PROJECT).")
+        from lensky_py_lab.clients.gee_client import GEEClient
+        from lensky_py_lab.io.gee_extract import extract_sources
+
+        print("=" * 60)
+        print(f"Step 0: Extracting {list(extract)} from Google Earth Engine -> {data_dir}")
+        print("=" * 60)
+        summaries = extract_sources(extract, data_dir, GEEClient(project=gee_project),
+                                    modis_collection=modis_collection, force=force_extract)
+        for name, info in summaries.items():
+            cmp = info["comparison_with_previous_file"]
+            print(f"  {name}: {info['rows']} rows, {info['window'][0]} .. {info['window'][1]}"
+                  + (f" | vs previous: {cmp['shared_dates_identical']}/{cmp['shared_dates']} shared dates identical,"
+                     f" rmse {cmp['rmse']}, max {cmp['max_abs_diff']}" if cmp.get("previous_file") else " | new file"))
+        print()
 
     # ── Step 1–4: load and process every source ──────────────────────────────
     print("=" * 60)
@@ -701,6 +729,32 @@ def _parse_args() -> argparse.Namespace:
         metavar="SOURCE",
         help="Satellite sources to leave out of the analysis regardless of the rules (e.g. L8).",
     )
+    p.add_argument(
+        "--extract",
+        default="none",
+        metavar="SOURCES",
+        help=(
+            "Re-extract these satellite series from Google Earth Engine before the run, overwriting "
+            "their CSVs in --data-dir: a comma list of MODIS,S2,L8, 'all', or 'none' (default: every "
+            "source is read from the local CSVs). Provenance is written to gee_extraction_log.json."
+        ),
+    )
+    p.add_argument(
+        "--gee-project",
+        default=os.environ.get("GEE_PROJECT"),
+        help="Google Earth Engine Cloud project for --extract (env: GEE_PROJECT).",
+    )
+    p.add_argument(
+        "--modis-collection",
+        default="006",
+        choices=["006", "061"],
+        help="MODIS collection for --extract: 006 reproduces the published MODIS.csv, 061 is the current reprocessing.",
+    )
+    p.add_argument(
+        "--force-extract",
+        action="store_true",
+        help="Overwrite a CSV even if the new extraction has far fewer dates than the existing file.",
+    )
     return p.parse_args()
 
 
@@ -714,4 +768,8 @@ if __name__ == "__main__":
         nsrs3_factor=args.nsrs3_factor,
         eligibility=args.eligibility,
         exclude=tuple(args.exclude),
+        extract=tuple(parse_sources(args.extract)),
+        gee_project=args.gee_project,
+        modis_collection=args.modis_collection,
+        force_extract=args.force_extract,
     )

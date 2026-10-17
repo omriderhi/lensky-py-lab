@@ -4,7 +4,7 @@
 
 `data/research_results/RH_NDVI/S2.csv` is **regenerated entirely** from
 `COPERNICUS/S2_SR_HARMONIZED` with the research script's settings, for 2019-01-01 to 2021-12-05
-(107 images, last image 2021-11-16). Run `python scripts/pull_s2_gee.py --project <gee-project>` to
+(107 images, last image 2021-11-16). Run `python scripts/pull_gee_data.py --sources S2 --project <gee-project>` to
 reproduce it. Earlier versions of this branch appended new images to the old export; that mixed
 processing versions and was replaced.
 

@@ -49,6 +49,14 @@ All scripts read data paths from environment variables — no hardcoded local pa
 | `RH_DAT_DIR` | Optional | Directory with raw Campbell `.dat` logger files (for intra-day NSRS figures) |
 | `DAILY_GRAPHS_EXCEL` | Optional | Path to `daily_graphsxlsx.xlsx` (4-sheet intra-day workbook, alternative to `.dat`) |
 | `RESEARCH_DATA_ROOT` | Optional | Root of the local research data tree (used by `_gen_local_notebook.py` only) |
+| `GEE_PROJECT` | Optional | Google Earth Engine Cloud project, needed only to re-extract satellite series (`--extract`, `scripts/pull_gee_data.py`) |
+
+**Re-extracting satellite data from Google Earth Engine** (optional; MODIS, S2, L8 only): choose per run which sources to pull again, the rest are read from the local CSVs.
+```
+python scripts/run_rh_ndvi.py --extract S2,L8 --gee-project <project>     # or: --extract all
+python scripts/pull_gee_data.py --sources MODIS --modis-collection 006    # extraction only, no analysis
+```
+The chosen sources' CSVs in `RH_DATA_DIR` are **overwritten** (they are tracked in git, so `git diff` shows the change) and the extraction is recorded in `gee_extraction_log.json` next to them. Details, default windows and the MODIS collection choice: `docs/features/gee-extraction.md`.
 
 **PyCharm run configuration** — paste into *Environment variables* field:
 ```

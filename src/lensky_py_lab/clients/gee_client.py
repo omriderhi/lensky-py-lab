@@ -148,6 +148,7 @@ class GEEClient:
         scale: Optional[int] = None,
         ndvi_min: Optional[float] = _NDVI_MIN_DEFAULT,
         cloud_pct_max: Optional[float] = None,
+        collection: Optional[str] = None,
     ) -> pd.DataFrame:
         """Compute mean NDVI over *geometry* for each image in *source*.
 
@@ -171,6 +172,9 @@ class GEEClient:
                 matches the JS script's ``maskLowValues`` function.
             cloud_pct_max: Override the per-source cloud percentage
                 threshold. Defaults to 10 % for S2 and L8 (as in the script).
+            collection: Override the GEE asset ID (e.g. ``"MODIS/006/MOD09GQ"``
+                to reproduce the research script instead of the default
+                Collection 6.1). The band names must match *source*.
 
         Returns:
             DataFrame indexed by unix timestamp (``TS``) with one column
@@ -188,7 +192,7 @@ class GEEClient:
         effective_scale = scale if scale is not None else _DEFAULT_SCALE[source]
 
         collection = (
-            ee.ImageCollection(_COLLECTIONS[source])
+            ee.ImageCollection(collection or _COLLECTIONS[source])
             .filterDate(start_str, end_str)
             .filterBounds(geometry)
         )
