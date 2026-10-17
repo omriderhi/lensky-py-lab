@@ -12,6 +12,7 @@ Date: 2025
 
 from __future__ import annotations
 
+import logging
 import sys
 from pathlib import Path
 from typing import Dict, Optional
@@ -19,6 +20,8 @@ from typing import Dict, Optional
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Attempt to load shared plot_config from repo root
@@ -29,9 +32,18 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 try:
-    from plot_config import COLORS, source_color  # type: ignore[import]
+    from plot_config import (  # type: ignore[import]
+        COLORS,
+        PHENO_MARKER_EDGE_COLOR,
+        PHENO_MARKER_EDGE_WIDTH,
+        PHENO_MARKER_SIZE,
+        source_color,
+    )
 except ImportError:  # pragma: no cover
-    COLORS: Dict[str, str] = {"sos": "#FFA500", "pos": "#FF0000", "eos": "#800080"}
+    COLORS: Dict[str, str] = {"sos": "#F0E442", "pos": "#D55E00", "eos": "#56B4E9"}
+    PHENO_MARKER_SIZE = 220
+    PHENO_MARKER_EDGE_WIDTH = 2.0
+    PHENO_MARKER_EDGE_COLOR = "black"
 
     def source_color(name: str) -> str:  # type: ignore[misc]
         return "#333333"
@@ -41,9 +53,9 @@ except ImportError:  # pragma: no cover
 # ---------------------------------------------------------------------------
 
 PHENOLOGY_COLORS: Dict[str, str] = {
-    "SoS": COLORS.get("sos", "#FFA500"),   # orange
-    "PoS": COLORS.get("pos", "#FF0000"),   # red
-    "EoS": COLORS.get("eos", "#800080"),   # purple
+    "SoS": COLORS.get("sos", "#F0E442"),   # yellow
+    "PoS": COLORS.get("pos", "#D55E00"),   # vermillion
+    "EoS": COLORS.get("eos", "#56B4E9"),   # sky blue
 }
 
 _PHENO_SHAPES: Dict[str, str] = {"SoS": "^", "PoS": "o", "EoS": "v"}
@@ -55,17 +67,58 @@ _DATE_VAL = [
 ]
 
 
+MIN_SEASON_DAYS = 60
+"""Default shortest SoS→EoS span accepted as a real season when drawing markers."""
+
+MIN_PEAK_TO_END_DAYS = 14
+"""Default shortest PoS→EoS span; shorter means the record ends at the peak."""
+
+_reported: set = set()
+
+
+def _is_complete_season(
+    row: pd.Series,
+    min_season_days: int = MIN_SEASON_DAYS,
+    min_peak_to_end_days: int = MIN_PEAK_TO_END_DAYS,
+) -> bool:
+    """Return False for degenerate seasons (truncated record at a series edge).
+
+    A hydrological year that is only partly covered by data (e.g. the record
+    starts in January or ends in autumn) yields SoS == PoS, or events piled up
+    within days. Those rows are kept in the CSV but are not drawn.
+
+    The events that are present (SoS, PoS, EoS, in that order) must be strictly
+    increasing, which also covers partial rows with a missing date. When all
+    three exist, SoS→EoS must be at least ``min_season_days`` and PoS→EoS at
+    least ``min_peak_to_end_days``.
+    """
+    try:
+        dates = [pd.to_datetime(row.get(c)) for c in ("SoS_date", "PoS_date", "EoS_date")]
+    except (TypeError, ValueError):
+        return True
+    present = [d for d in dates if not pd.isna(d)]
+    if any(b <= a for a, b in zip(present, present[1:])):
+        return False
+    if len(present) < 3:
+        return True
+    sos, pos, eos = present
+    return (eos - sos).days >= min_season_days and (eos - pos).days >= min_peak_to_end_days
+
+
 def draw_phenology_markers(
     ax: plt.Axes,
     phenology_df: pd.DataFrame,
     source: Optional[str] = None,
     year: Optional[int] = None,
+    skip_degenerate: bool = True,
+    min_season_days: int = MIN_SEASON_DAYS,
+    min_peak_to_end_days: int = MIN_PEAK_TO_END_DAYS,
 ) -> None:
     """Scatter SoS / PoS / EoS points at ``(event_date, event_value)``.
 
-    Marker fill colour encodes the event type (SoS/PoS/EoS); marker edge
-    colour encodes the data source (matching the NDVI curve colour). One
-    legend entry per marker type actually drawn is added.
+    Marker fill colour encodes the event type (SoS/PoS/EoS); the edge is a
+    constant high-contrast colour so markers stand out against any curve.
+    One legend entry per marker type actually drawn is added.
 
     Parameters
     ----------
@@ -79,13 +132,19 @@ def draw_phenology_markers(
         Filter to a single satellite/source name (matches the ``satellite`` column).
     year : int, optional
         Filter to a single hydrological year.
+    skip_degenerate : bool
+        Skip seasons truncated by the record edges (see :func:`_is_complete_season`).
+        Skipped rows are logged once each and remain in ``phenology_df`` / the CSV.
+        Pass ``False`` to draw every row.
+    min_season_days, min_peak_to_end_days : int
+        Thresholds for the degenerate-season test.
 
     Notes
     -----
     Marker colours are thesis-consistent:
-    * SoS -> orange  (#FFA500)
-    * PoS -> red     (#FF0000)
-    * EoS -> purple  (#800080)
+    * SoS -> yellow     (#F0E442)
+    * PoS -> vermillion (#D55E00)
+    * EoS -> sky blue   (#56B4E9)
     """
     df = phenology_df
     if source is not None and "satellite" in df.columns:
@@ -97,8 +156,17 @@ def draw_phenology_markers(
     drawn_types: set = set()
 
     for _, row in df.iterrows():
-        sat = str(row.get("satellite", ""))
-        edge_color = source_color(sat)
+        if skip_degenerate and not _is_complete_season(
+            row, min_season_days, min_peak_to_end_days
+        ):
+            key = (row.get("satellite"), row.get("year"))
+            if key not in _reported:
+                _reported.add(key)
+                logger.warning(
+                    "Phenology markers not drawn for %s %s: truncated/degenerate season "
+                    "(still present in the CSV).", *key,
+                )
+            continue
         for marker, col_date, col_val in _DATE_VAL:
             date_raw = row.get(col_date)
             val = row.get(col_val)
@@ -113,13 +181,15 @@ def draw_phenology_markers(
                 date, val,
                 color=PHENOLOGY_COLORS[marker],
                 marker=_PHENO_SHAPES[marker],
-                s=80, zorder=5,
-                edgecolors=edge_color, linewidths=1.5,
+                s=PHENO_MARKER_SIZE, zorder=6,
+                edgecolors=PHENO_MARKER_EDGE_COLOR,
+                linewidths=PHENO_MARKER_EDGE_WIDTH,
             )
             drawn_types.add(marker)
 
     for marker in ["SoS", "PoS", "EoS"]:
         if marker in drawn_types:
             ax.scatter([], [], color=PHENOLOGY_COLORS[marker],
-                       marker=_PHENO_SHAPES[marker], s=80,
-                       edgecolors="black", linewidths=1.5, label=marker)
+                       marker=_PHENO_SHAPES[marker], s=PHENO_MARKER_SIZE,
+                       edgecolors=PHENO_MARKER_EDGE_COLOR,
+                       linewidths=PHENO_MARKER_EDGE_WIDTH, label=marker)

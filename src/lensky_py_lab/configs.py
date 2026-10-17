@@ -10,9 +10,15 @@ class SourceConfig:
     Attributes:
         min_value: Drop values below this threshold. None = use data minimum.
         max_value: Drop values above this threshold. None = use data maximum.
-        average_window: Outlier-emphasis filter tolerance. Values whose absolute
-            deviation from their local neighbourhood mean is >= this threshold are
-            retained; others are discarded. None = skip this filter step.
+        outlier_window: Number of observations in the centred sliding window used
+            for outlier detection (see ``filter_outliers_sliding_window``). A point
+            is removed when it deviates from the window median by more than
+            ``max(outlier_k × 1.4826 × MAD, outlier_min_threshold)``.
+            None = skip outlier detection.
+        outlier_k: Multiplier on the robust (MAD-based) local standard deviation.
+        outlier_min_threshold: Floor of the removal threshold, in NDVI units.
+        outlier_scale_window: Observations in the window over which the MAD of the
+            residuals is taken.
         images_per_month: LOWESS smoothing bandwidth expressed as the typical number
             of observations per month (frac = images_per_month / N_non_null_points).
             None = skip smoothing.
@@ -29,7 +35,10 @@ class SourceConfig:
 
     min_value: Optional[float] = None
     max_value: Optional[float] = None
-    average_window: Optional[float] = None
+    outlier_window: Optional[int] = None
+    outlier_k: float = 3.0
+    outlier_min_threshold: float = 0.02
+    outlier_scale_window: int = 31
     images_per_month: Optional[int] = None
     general_factor: Optional[float] = None
     wide_gap_days: Optional[int] = 60
@@ -38,6 +47,13 @@ class SourceConfig:
     @classmethod
     def from_notebook_dict(cls, d: dict) -> SourceConfig:
         """Create from the notebook's SOURCES_CONFIGURATIONS format (False means None)."""
+
+        if "average_window" in d:
+            raise ValueError(
+                "'average_window' was removed (it implemented a mean-deviation rule that "
+                "kept outliers and discarded ordinary values). Use 'outlier_window' "
+                "(observations in the sliding window, e.g. 7)."
+            )
 
         def _parse(v: object) -> Optional[float]:
             return None if (v is False or v is None) else float(v)
@@ -48,7 +64,10 @@ class SourceConfig:
         return cls(
             min_value=_parse(d.get("min")),
             max_value=_parse(d.get("max")),
-            average_window=_parse(d.get("average_window")),
+            outlier_window=_parse_int(d.get("outlier_window"), None),
+            outlier_k=float(d.get("outlier_k", 3.0)),
+            outlier_min_threshold=float(d.get("outlier_min_threshold", 0.02)),
+            outlier_scale_window=int(d.get("outlier_scale_window", 31)),
             images_per_month=int(d["images_per_month"]) if d.get("images_per_month") else None,
             general_factor=_parse(d.get("general_factor")),
             wide_gap_days=_parse_int(d.get("wide_gap_days"), 60),

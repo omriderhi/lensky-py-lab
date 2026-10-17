@@ -22,14 +22,13 @@ Notes
 -----
 The NSRS_3 sensor at Ramat Hanadiv uses a wide-angle lens. A slight shift in
 sensor pole orientation caused it to capture a portion of the sky alongside
-vegetation, suppressing the measured NDVI. The thesis applies a factor of
-**1.4** to correct this.
+vegetation, suppressing the measured NDVI.
 
-    corrected_NDVI = raw_NDVI × 1.4
+    corrected_NDVI = raw_NDVI × factor
 
-This module reproduces the derivation by searching for the factor that
-minimizes RMSE between corrected NSRS_3 and the reference signal
-(mean of NSRS_1 and NSRS_2).
+The factor is derived from the data: it is the value that minimizes RMSE
+between corrected NSRS_3 and the reference signal (mean of NSRS_1 and NSRS_2).
+The thesis reports 1.4 (``NSRS3_PUBLISHED_FACTOR``), kept only for comparison.
 
 Dependencies:
     - numpy, pandas, matplotlib, scipy
@@ -47,17 +46,43 @@ import numpy as np
 import pandas as pd
 from scipy.stats import pearsonr
 
+from lensky_py_lab.constants import NDVI_LOWESS_FIELD
+from lensky_py_lab.gap_utils import boundaries_from_raw, iter_segments_from_boundaries
+from lensky_py_lab.metrics import rmse as _rmse
+
 # ---------------------------------------------------------------------------
-# Published / thesis calibration constant
+# Thesis reference value (comparison only — never applied to data)
 # ---------------------------------------------------------------------------
 
-NSRS3_PUBLISHED_FACTOR = 1.36
-"""Empirical correction factor reported in the thesis (Derhi, 2025).
+NSRS3_PUBLISHED_FACTOR = 1.4
+"""Correction factor reported in the thesis (Derhi, 2025), kept for comparison.
 
-The NSRS_3 sensor captured sky reflectance due to a slight pole tilt,
-suppressing measured NDVI. Multiplying by 1.4 restores agreement with
-NSRS_1 and NSRS_2.
+The factor actually applied is derived from the data by
+:func:`calibrate_nsrs3_sources` and held by :func:`get_active_factor`.
 """
+
+# ---------------------------------------------------------------------------
+# Active (data-derived) factor — set once per run
+# ---------------------------------------------------------------------------
+
+_active_factor: Optional[float] = None
+
+
+def set_active_factor(factor: float) -> None:
+    """Register the data-derived NSRS_3 factor for the rest of the run."""
+    global _active_factor
+    _active_factor = float(factor)
+
+
+def get_active_factor() -> Optional[float]:
+    """Return the registered NSRS_3 factor, or *None* if calibration is not in use."""
+    return _active_factor
+
+
+def clear_active_factor() -> None:
+    """Forget any registered factor, so a new run starts uncalibrated."""
+    global _active_factor
+    _active_factor = None
 
 
 # ---------------------------------------------------------------------------
@@ -96,7 +121,7 @@ def find_optimal_calibration_factor(
         Keys:
 
         * ``optimal_factor``  – factor minimising RMSE
-        * ``published_factor`` – thesis constant (1.4)
+        * ``published_factor`` – thesis value (1.4), for comparison only
         * ``published_factor_rmse`` – RMSE at the thesis factor
         * ``rmse_curve``  – DataFrame with ``factor`` and ``rmse`` columns
         * ``r2_raw``      – Pearson R² before calibration
@@ -153,15 +178,16 @@ def find_optimal_calibration_factor(
     }
 
 
-def apply_calibration(series: pd.Series, factor: float = NSRS3_PUBLISHED_FACTOR) -> pd.Series:
+def apply_calibration(series: pd.Series, factor: Optional[float] = None) -> pd.Series:
     """Multiply an NSRS_3 time series by the calibration factor.
 
     Parameters
     ----------
     series : pd.Series
         Raw NSRS_3 NDVI indexed by unix timestamp.
-    factor : float
-        Multiplicative correction factor. Defaults to the published value of 1.4.
+    factor : float, optional
+        Multiplicative correction factor. Defaults to the data-derived factor
+        registered by :func:`calibrate_nsrs3_sources`; raises if none exists.
 
     Returns
     -------
@@ -170,9 +196,73 @@ def apply_calibration(series: pd.Series, factor: float = NSRS3_PUBLISHED_FACTOR)
 
     Examples
     --------
-    >>> corrected = apply_calibration(nsrs3_raw)
+    >>> corrected = apply_calibration(nsrs3_raw, factor=1.36)
     """
+    if factor is None:
+        factor = get_active_factor()
+    if factor is None:
+        raise ValueError(
+            "No calibration factor: pass factor= or run calibrate_nsrs3_sources() first."
+        )
     return (series * factor).rename(str(series.name) + "_corrected")
+
+
+_FACTOR_ATTR = "nsrs3_factor"
+
+
+def apply_nsrs3_factor(
+    nsrs_sources: Dict,
+    factor: float,
+    nsrs3_names: Tuple[str, ...] = ("NSRS_3", "NSRS_3_B"),
+) -> None:
+    """Multiply *factor* into the LOWESS column of the NSRS_3 sources and register it.
+
+    Calibration is optional: skip this (and :func:`calibrate_nsrs3_sources`) to leave
+    NSRS_3 uncalibrated. Applying twice would silently double-scale, so a source that
+    was already calibrated raises ``ValueError``.
+    """
+    targets = [nsrs_sources[n] for n in nsrs3_names if n in nsrs_sources]
+    if any(_FACTOR_ATTR in src.processed.attrs for src in targets):
+        raise ValueError("NSRS_3 sources are already calibrated; refusing to scale twice.")
+    for src in targets:
+        src.processed[NDVI_LOWESS_FIELD] = src.processed[NDVI_LOWESS_FIELD] * factor
+        src.processed.attrs[_FACTOR_ATTR] = float(factor)
+    set_active_factor(factor)
+
+
+def calibrate_nsrs3_sources(
+    nsrs_sources: Dict,
+    nsrs3_names: Tuple[str, ...] = ("NSRS_3", "NSRS_3_B"),
+) -> Tuple[Dict, pd.Series]:
+    """Derive the NSRS_3 factor from the data and apply it to the NSRS_3 sources.
+
+    Optional step: nothing in the package requires it. The sources must be
+    processed *without* a ``general_factor``. The raw
+    (unscaled) merged NSRS_3 LOWESS series is compared with the mean of NSRS_1
+    and NSRS_2; the RMSE-minimising factor is multiplied into the LOWESS column
+    of every NSRS_3 source and registered via :func:`set_active_factor`.
+
+    Returns
+    -------
+    (dict, pd.Series)
+        The result of :func:`find_optimal_calibration_factor` and the unscaled
+        merged NSRS_3 series (for validation figures).
+    """
+    from lensky_py_lab.models.site import Site
+
+    site_df = Site(name="nsrs3_calibration", nsrs_sources=nsrs_sources).run_analysis()
+    cols = {n: f"{NDVI_LOWESS_FIELD} {n}" for n in ("NSRS_1", "NSRS_2", "NSRS_3")}
+    missing = [c for c in cols.values() if c not in site_df.columns]
+    if missing:
+        raise ValueError(f"Cannot derive NSRS_3 factor — missing columns: {missing}")
+
+    nsrs3_raw = site_df[cols["NSRS_3"]].dropna().rename("NSRS_3_raw")
+    reference = _align_mean(site_df[cols["NSRS_1"]].dropna(), site_df[cols["NSRS_2"]].dropna())
+    result = find_optimal_calibration_factor(nsrs3_raw, reference)
+    factor = result["optimal_factor"]
+
+    apply_nsrs3_factor(nsrs_sources, factor, nsrs3_names)
+    return result, nsrs3_raw
 
 
 def create_calibration_figure(
@@ -181,7 +271,7 @@ def create_calibration_figure(
     nsrs2: pd.Series,
     calibration_result: Optional[Dict] = None,
     output_dir: Path = Path("data/results/figures/calibration"),
-    factor: float = NSRS3_PUBLISHED_FACTOR,
+    factor: Optional[float] = None,
 ) -> plt.Figure:
     """Create the 4-panel NSRS_3 calibration validation figure.
 
@@ -203,8 +293,9 @@ def create_calibration_figure(
         automatically if not supplied.
     output_dir : Path
         Directory where PNG figures are saved.
-    factor : float
-        Factor used for the corrected series (default 1.4, the thesis value).
+    factor : float, optional
+        Factor used for the corrected series. Defaults to the optimal factor
+        in ``calibration_result``.
 
     Returns
     -------
@@ -224,15 +315,18 @@ def create_calibration_figure(
         apply_publication_style()
     except ImportError:
         COLORS = {
-            "nsrs1": "#8c564b", "nsrs2": "#e377c2",
-            "nsrs3_raw": "#bcbd22", "nsrs3_corrected": "#17becf",
+            "nsrs1": "#5BAA3C", "nsrs2": "#6B3E1A",
+            "nsrs3_raw": "#999999", "nsrs3_corrected": "#7D7226",
         }
 
-    nsrs3_corrected = apply_calibration(nsrs3_raw, factor)
     reference = _align_mean(nsrs1, nsrs2)
 
     if calibration_result is None:
         calibration_result = find_optimal_calibration_factor(nsrs3_raw, reference)
+    if factor is None:
+        factor = calibration_result["optimal_factor"]
+    factor = float(factor)
+    nsrs3_corrected = apply_calibration(nsrs3_raw, factor)
 
     fig, axes = plt.subplots(2, 2, figsize=(16, 12))
     ax_ts, ax_raw, ax_corr, ax_rmse = axes.flat
@@ -240,25 +334,29 @@ def create_calibration_figure(
     # ------------------------------------------------------------------ #
     # Panel A — Time series
     # ------------------------------------------------------------------ #
-    dates = {
-        "raw":       pd.to_datetime(nsrs3_raw.index,       unit="s"),
-        "corrected": pd.to_datetime(nsrs3_corrected.index,  unit="s"),
-        "nsrs1":     pd.to_datetime(nsrs1.index,            unit="s"),
-        "nsrs2":     pd.to_datetime(nsrs2.index,            unit="s"),
-    }
-    ax_ts.plot(dates["nsrs1"],     nsrs1.values,             color=COLORS["nsrs1"],
-               label="NSRS_1", linewidth=1.8)
-    ax_ts.plot(dates["nsrs2"],     nsrs2.values,             color=COLORS["nsrs2"],
-               label="NSRS_2", linewidth=1.8)
-    ax_ts.plot(dates["raw"],       nsrs3_raw.values,         color=COLORS["nsrs3_raw"],
-               label="NSRS_3 raw", linewidth=1.5, linestyle="--", alpha=0.8)
-    ax_ts.plot(dates["corrected"], nsrs3_corrected.values,   color=COLORS["nsrs3_corrected"],
-               label=f"NSRS_3 corrected (×{factor})", linewidth=1.8)
+    # Break lines at wide data gaps (same 60-day rule as every other time-series
+    # figure) instead of drawing straight lines across missing seasons. The
+    # observations themselves are plotted, not resampled. Raw and corrected NSRS_3
+    # share one set of segment boundaries so they always break at the same place.
+    nsrs3_bounds = _segment_boundaries(nsrs3_raw)
+
+    for series, bounds, key, label, extra in (
+        (nsrs1, None, "nsrs1", "NSRS_1", {}),
+        (nsrs2, None, "nsrs2", "NSRS_2", {}),
+        (nsrs3_raw, nsrs3_bounds, "nsrs3_raw", "NSRS_3 raw", {"alpha": 0.85}),
+        (nsrs3_corrected, nsrs3_bounds, "nsrs3_corrected",
+         f"NSRS_3 corrected (×{factor:.3f})", {}),
+    ):
+        d, v = _gapped_xy(series, bounds)
+        ax_ts.plot(d, v, color=COLORS[key], label=label, linewidth=1.8, **extra)
     ax_ts.set_title("A — Time Series Comparison")
     ax_ts.set_xlabel("Date")
     ax_ts.set_ylabel("NDVI")
-    ax_ts.legend()
-    _add_sky_catch_box(ax_ts)
+    # Headroom above the data so the (large) legend never covers a curve
+    y_lo, y_hi = ax_ts.get_ylim()
+    ax_ts.set_ylim(y_lo, y_hi + 0.3 * (y_hi - y_lo))
+    ax_ts.legend(loc="upper center", ncol=2)
+    _add_sky_catch_box(ax_ts, factor)
 
     # ------------------------------------------------------------------ #
     # Panel B — Scatter: raw vs reference
@@ -276,7 +374,7 @@ def create_calibration_figure(
     df_corr = pd.DataFrame({"x": reference, "y": nsrs3_corrected}).dropna()
     _scatter_with_stats(ax_corr, df_corr["x"], df_corr["y"],
                         color=COLORS["nsrs3_corrected"],
-                        title=f"C — Corrected NSRS_3 vs Reference (factor={factor})",
+                        title=f"C — Corrected NSRS_3 vs Reference (factor={factor:.3f})",
                         xlabel="Reference NDVI (mean NSRS_1, NSRS_2)",
                         ylabel="NSRS_3 corrected NDVI")
 
@@ -285,12 +383,12 @@ def create_calibration_figure(
     # ------------------------------------------------------------------ #
     rmse_df = calibration_result["rmse_curve"]
     ax_rmse.plot(rmse_df["factor"], rmse_df["rmse"],
-                 color="#1f77b4", linewidth=2.0, label="RMSE")
-    ax_rmse.axvline(factor, color="#FF0000", linestyle="--", linewidth=1.8,
-                    label=f"Chosen factor = {factor}")
+                 color=COLORS["nsrs3_corrected"], linewidth=2.0, label="RMSE")
+    ax_rmse.axvline(factor, color=COLORS["nsrs1"], linestyle="--", linewidth=1.8,
+                    label=f"Applied factor = {factor:.3f}")
     opt = calibration_result["optimal_factor"]
-    ax_rmse.axvline(opt, color="#FFA500", linestyle=":", linewidth=1.5,
-                    label=f"Optimal factor = {opt:.2f}")
+    ax_rmse.axvline(opt, color=COLORS["nsrs2"], linestyle=":", linewidth=1.5,
+                    label=f"Optimal factor = {opt:.3f}")
     ax_rmse.set_title("D — RMSE vs Correction Factor")
     ax_rmse.set_xlabel("Correction factor")
     ax_rmse.set_ylabel("RMSE")
@@ -340,9 +438,33 @@ def save_calibration_statistics(
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-def _rmse(predicted: np.ndarray, actual: np.ndarray) -> float:
-    diff = predicted - actual
-    return float(np.sqrt(np.nanmean(diff ** 2)))
+def _segment_boundaries(series: pd.Series):
+    """(start, end) unix-second windows of continuous coverage (60-day gap rule)."""
+    s = series.dropna()
+    return boundaries_from_raw(s.index.values.astype(np.int64), s.values.astype(float))
+
+
+def _gapped_xy(series: pd.Series, boundaries=None):
+    """Dates and values of *series* with a NaN pen-lift between coverage segments.
+
+    Original observations are kept as-is (no resampling). Pass *boundaries* to
+    reuse another series' segmentation; by default they come from *series* itself.
+    """
+    s = series.dropna()
+    ts = s.index.values.astype(np.int64)
+    vals = s.values.astype(float)
+    if boundaries is None:
+        boundaries = boundaries_from_raw(ts, vals)
+    xs, ys = [], []
+    for i, (t, v) in enumerate(iter_segments_from_boundaries(ts, vals, boundaries)):
+        if i:
+            xs.append(np.array([(xs[-1][-1] + t[0]) / 2.0]))
+            ys.append(np.array([np.nan]))
+        xs.append(t.astype(float))
+        ys.append(v)
+    if not xs:
+        return pd.to_datetime(np.array([], dtype=np.int64), unit="s"), np.array([])
+    return pd.to_datetime(np.concatenate(xs).astype(np.int64), unit="s"), np.concatenate(ys)
 
 
 def _pearson_r2(x: np.ndarray, y: np.ndarray) -> float:
@@ -379,7 +501,7 @@ def _scatter_with_stats(
     if mask.sum() >= 3:
         m, b = np.polyfit(x[mask], y[mask], 1)
         x_line = np.linspace(lo, hi, 100)
-        ax.plot(x_line, m * x_line + b, color="#d62728", linewidth=1.5, label="Regression")
+        ax.plot(x_line, m * x_line + b, color="#D55E00", linewidth=1.5, label="Regression")
 
         r2 = _pearson_r2(x.values, y.values)
         rmse = _rmse(y.values, x.values)
@@ -395,18 +517,18 @@ def _scatter_with_stats(
     ax.set_title(title)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
-    ax.legend(fontsize=9)
+    ax.legend(fontsize=plt.rcParams["legend.fontsize"])
     ax.set_xlim(lo - 0.02, hi + 0.02)
     ax.set_ylim(lo - 0.02, hi + 0.02)
 
 
-def _add_sky_catch_box(ax: plt.Axes) -> None:
+def _add_sky_catch_box(ax: plt.Axes, factor: float) -> None:
     """Add an explanatory text box about the sky-catch artefact."""
     ax.text(
         0.02, 0.05,
         "NSRS_3 wide-angle lens captured sky reflectance\n"
         "due to sensor pole tilt, suppressing measured NDVI.\n"
-        f"Corrected by factor ×{NSRS3_PUBLISHED_FACTOR} (Derhi, 2025).",
+        f"Corrected by data-derived factor ×{factor:.3f}.",
         transform=ax.transAxes,
         fontsize=9,
         verticalalignment="bottom",

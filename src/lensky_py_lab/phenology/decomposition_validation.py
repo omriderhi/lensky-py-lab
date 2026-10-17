@@ -27,6 +27,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from lensky_py_lab.metrics import rmse
+
 # Maps each decomposed quantity to the NSRS sensor it is compared against, and the
 # column that holds it. "full" is taken from the master table (smoothed satellite NDVI);
 # "woody" / "herbaceous" come from the decomposition output.
@@ -64,7 +66,7 @@ def _pair_metrics(estimate: pd.Series, reference: pd.Series) -> dict | None:
     return {
         "n": int(len(paired)),
         "mae": float(np.mean(np.abs(diff))),
-        "rmse": float(np.sqrt(np.mean(diff ** 2))),
+        "rmse": rmse(paired["est"], paired["ref"]),
         "r": float(np.corrcoef(paired["est"], paired["ref"])[0, 1]),
         "bias": float(np.mean(diff)),
     }

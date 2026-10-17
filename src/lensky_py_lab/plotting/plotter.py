@@ -46,13 +46,27 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 try:
-    from plot_config import COLORS, apply_publication_style, source_color  # type: ignore[import]
+    from plot_config import (  # type: ignore[import]
+        COLORS,
+        FONT_SIZE_LEGEND,
+        FONT_SIZE_TICK_DATE,
+        NSRS_LINESTYLE,
+        NSRS_LINEWIDTH,
+        SATELLITE_LINEWIDTH,
+        apply_publication_style,
+        source_color,
+    )
 
     apply_publication_style()
     _HAS_PLOT_CONFIG = True
 except ImportError:
     _HAS_PLOT_CONFIG = False
     COLORS: dict = {}
+    FONT_SIZE_LEGEND = 14
+    FONT_SIZE_TICK_DATE = 11
+    NSRS_LINESTYLE = "-"
+    NSRS_LINEWIDTH = 2.8
+    SATELLITE_LINEWIDTH = 1.8
 
     def source_color(name: str) -> str:  # type: ignore[misc]
         return "#333333"
@@ -214,13 +228,15 @@ def plot_site(
     for col in lowess_cols:
         src = col.removeprefix(f"{NDVI_LOWESS_FIELD} ")
         color = source_color(src)
-        linestyle = "--" if src.upper().startswith("NSRS") else "-"
+        is_nsrs = src.upper().startswith("NSRS")
 
         dates_plot, vals_plot = dense_interpolate_with_gaps(
             ts_unix, site_df[col].values, WIDE_GAP_SECONDS
         )
         ax.plot(dates_plot, vals_plot, label=src, color=color,
-                linewidth=1.8, linestyle=linestyle)
+                linewidth=NSRS_LINEWIDTH if is_nsrs else SATELLITE_LINEWIDTH,
+                linestyle=NSRS_LINESTYLE if is_nsrs else "-",
+                zorder=4 if is_nsrs else 3)
 
     # ---- Phenological markers ----
     if phenology_df is not None and not phenology_df.empty:
@@ -229,12 +245,12 @@ def plot_site(
     ax.set_ylabel("NDVI", fontsize=11)
     ax.set_xlabel("Date", fontsize=11)
     ax.set_title(site_name, fontsize=12, fontweight="bold")
-    ax.legend(loc="upper left", fontsize=8, framealpha=0.9)
+    ax.legend(loc="upper left", fontsize=FONT_SIZE_LEGEND, framealpha=0.9)
     _format_date_axis(ax)
 
     if has_rain:
         ax2 = ax.twinx()
-        rain_color = COLORS.get("rainfall", "steelblue")
+        rain_color = COLORS.get("rainfall", "#56B4E9")
         # Rainfall: bar chart only for non-NaN dates
         rain_vals = site_df[IMS_RAINFALL_FIELD].values
         rain_mask = np.isfinite(rain_vals)
@@ -243,13 +259,13 @@ def plot_site(
                 width=5, label="Rainfall (mm)", zorder=0)
         ax2.invert_yaxis()
         ax2.set_ylabel("Rainfall (mm)", fontsize=10)
-        ax2.legend(loc="upper right", fontsize=8)
+        ax2.legend(loc="upper right", fontsize=FONT_SIZE_LEGEND)
 
     if has_temp:
         ax3 = ax.twinx()
         if has_rain:
             ax3.spines["right"].set_position(("outward", 60))
-        temp_color = COLORS.get("temperature", "red")
+        temp_color = COLORS.get("temperature", "#999999")
         # Temperature: connect only non-NaN values (no gaps)
         temp_vals = site_df[IMS_TEMPERATURE_FIELD].values
         temp_mask = np.isfinite(temp_vals)
@@ -257,7 +273,7 @@ def plot_site(
         ax3.plot(temp_dates, temp_vals[temp_mask], color=temp_color,
                  linewidth=1.2, linestyle=":", label="Temp (°C)")
         ax3.set_ylabel("Temperature (°C)", fontsize=10)
-        ax3.legend(loc="lower right", fontsize=8)
+        ax3.legend(loc="lower right", fontsize=FONT_SIZE_LEGEND)
 
     fig.tight_layout()
     return fig
@@ -333,4 +349,4 @@ def _iter_gap_fallback(ts_unix, values):
 def _format_date_axis(ax: plt.Axes) -> None:
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m"))
     ax.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
-    plt.setp(ax.get_xticklabels(), rotation=45, ha="right", fontsize=8)
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right", fontsize=FONT_SIZE_TICK_DATE)

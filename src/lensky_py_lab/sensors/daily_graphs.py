@@ -70,6 +70,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from lensky_py_lab.sensors.nsrs_calibration import get_active_factor
+
 # ---------------------------------------------------------------------------
 # Attempt to load shared plot_config from repo root
 # ---------------------------------------------------------------------------
@@ -85,9 +87,11 @@ try:
 except ImportError:
     _HAS_PLOT_CONFIG = False
     COLORS: Dict[str, str] = {
-        "nsrs1": "#e377c2",
-        "nsrs2": "#7f7f7f",
-        "nsrs3_corrected": "#17becf",
+        "nsrs1": "#5BAA3C",
+        "nsrs2": "#6B3E1A",
+        "nsrs3_corrected": "#7D7226",
+        "woody": "#E69F00",
+        "herbaceous": "#009E73",
     }
 
 # ---------------------------------------------------------------------------
@@ -107,18 +111,17 @@ _BAND_COLS = {
 _NDVI_COLS   = {1: "NDVI_1_Avg", 2: "NDVI_2_Avg", 3: "NDVI_3_Avg"}
 
 _SENSOR_COLORS = {
-    1: COLORS.get("nsrs1",           "#e377c2"),
-    2: COLORS.get("nsrs2",           "#7f7f7f"),
-    3: COLORS.get("nsrs3_corrected", "#17becf"),
+    1: COLORS.get("nsrs1",           "#5BAA3C"),
+    2: COLORS.get("nsrs2",           "#6B3E1A"),
+    3: COLORS.get("nsrs3_corrected", "#7D7226"),
 }
 
 # Semantic labels and colors matching the original research script
 _SENSOR_LABELS = {1: "Herbaceous", 2: "Woody", 3: "Mixed"}
-_SENSOR_COLORS_SEMANTIC = {1: "green", 2: "brown", 3: "blue"}
+_SENSOR_COLORS_SEMANTIC = {1: COLORS["herbaceous"], 2: COLORS["woody"], 3: "#0072B2"}
 
 # Logger NDVI — pre-computed by Campbell datalogger, used as primary source
 _LOGGER_NDVI_COLS = {1: "NDVI_1_Avg", 2: "NDVI_2_Avg", 3: "NDVI_3_Avg"}
-_NSRS3_CALIBRATION_FACTOR = 1.4  # NSRS_3 wide-angle correction (Derhi 2025)
 
 _DAYLIGHT_THRESHOLD   = 1e-4   # W/m² nm⁻¹ sr⁻¹ — minimum DownNIR to count as daylight
 ACQUISITION_NOON_CUTOFF = 12   # last hour (inclusive) per research protocol
@@ -367,8 +370,9 @@ def get_logger_ndvi(
 
     This is the primary NDVI source — the values the logger computes on-device
     from raw band irradiance every minute.  NSRS_3 (Mixed sensor) is multiplied
-    by ``_NSRS3_CALIBRATION_FACTOR`` (1.4) to correct for wide-angle lens tilt
-    (Derhi 2025).
+    by the data-derived NSRS_3 factor (``get_active_factor()``) to correct for
+    wide-angle lens tilt. Calibration is optional: if no factor was registered in
+    this run, the series is returned uncalibrated (no warning).
 
     Parameters
     ----------
@@ -377,7 +381,7 @@ def get_logger_ndvi(
     sensor : int
         Sensor number: 1, 2, or 3.
     apply_calibration : bool
-        Apply ×1.4 correction to sensor 3 (default *True*).
+        Apply the data-derived correction to sensor 3 (default *True*).
 
     Returns
     -------
@@ -390,7 +394,9 @@ def get_logger_ndvi(
         return None
     s = df[col].astype(float).copy()
     if sensor == 3 and apply_calibration:
-        s = s * _NSRS3_CALIBRATION_FACTOR
+        factor = get_active_factor()
+        if factor is not None:
+            s = s * factor
     s.name = f"NDVI_{sensor}_logger"
     return s
 
@@ -547,7 +553,7 @@ def plot_daily_bands(
     Both downwelling (vegetation-facing) and upwelling (sky-facing, if available)
     channels are shown.  Overlays NDVI on a secondary y-axis; when
     *use_logger_ndvi* is *True* uses the logger ``NDVI_k_Avg`` column (with
-    NSRS_3 ×1.4 calibration), otherwise uses the band-computed formula.
+    NSRS_3 data-derived calibration), otherwise uses the band-computed formula.
     """
     cols = _BAND_COLS.get(sensor, {})
     sub  = df[_daylight_mask(df)] if daylight_only else df
@@ -613,7 +619,7 @@ def plot_daily_summary(
     (default ``"10:00"``; pass *None* to suppress).
 
     When *use_logger_ndvi* is *True* (default): uses the pre-computed logger
-    ``NDVI_k_Avg`` columns (Herbaceous / Woody / Mixed) with NSRS_3 ×1.4.
+    ``NDVI_k_Avg`` columns (Herbaceous / Woody / Mixed) with the data-derived NSRS_3 factor.
     When *False*: uses NDVI computed from raw band irradiance.
     """
     n = len(sheets)

@@ -39,6 +39,13 @@ try:
         COLORS,
         FIGURE_DPI,
         FIGURE_FORMATS,
+        FONT_SIZE_LEGEND,
+        FONT_SIZE_PANEL_LETTER,
+        FONT_SIZE_TICK_DATE,
+        NSRS_LINESTYLE,
+        NSRS_LINEWIDTH,
+        SATELLITE_LINEWIDTH,
+        SAVE_DPI,
         apply_publication_style,
         source_color,
     )
@@ -48,24 +55,31 @@ try:
 except ImportError:  # pragma: no cover
     _HAS_PLOT_CONFIG = False
     FIGURE_DPI = 300
+    SAVE_DPI = 300
     FIGURE_FORMATS = ["tiff"]
+    FONT_SIZE_LEGEND = 14
+    FONT_SIZE_PANEL_LETTER = 16
+    FONT_SIZE_TICK_DATE = 11
+    NSRS_LINESTYLE = "-"
+    NSRS_LINEWIDTH = 2.8
+    SATELLITE_LINEWIDTH = 1.8
     COLORS: Dict[str, str] = {
-        "modis":           "#1f77b4",
-        "sentinel2":       "#ff7f0e",
-        "landsat8":        "#2ca02c",
-        "venus":           "#d62728",
-        "planet":          "#9467bd",
-        "nsrs1":           "#8c564b",
-        "nsrs2":           "#e377c2",
-        "nsrs3_raw":       "#bcbd22",
-        "nsrs3_corrected": "#17becf",
-        "woody":           "#5B4A3F",
-        "herbaceous":      "#4CAF50",
-        "sos":             "#FF7F00",
-        "pos":             "#E41A1C",
-        "eos":             "#984EA3",
-        "rainfall":        "#4169E1",
-        "temperature":     "#DC143C",
+        "modis":           "#0072B2",
+        "sentinel2":       "#E69F00",
+        "landsat8":        "#009E73",
+        "venus":           "#D55E00",
+        "planet":          "#CC79A7",
+        "nsrs1":           "#5BAA3C",
+        "nsrs2":           "#6B3E1A",
+        "nsrs3_raw":       "#999999",
+        "nsrs3_corrected": "#7D7226",
+        "woody":           "#E69F00",
+        "herbaceous":      "#009E73",
+        "sos":             "#F0E442",
+        "pos":             "#D55E00",
+        "eos":             "#56B4E9",
+        "rainfall":        "#56B4E9",
+        "temperature":     "#999999",
     }
 
     def source_color(name: str) -> str:  # type: ignore[misc]
@@ -122,6 +136,17 @@ def save_figure(
     return saved
 
 
+def add_panel_letter(ax: plt.Axes, letter: str) -> None:
+    """Place a bold subplot letter (e.g. ``"A"``) in the top-left of *ax*."""
+    ax.text(
+        0.012, 0.97, letter, transform=ax.transAxes,
+        fontsize=FONT_SIZE_PANEL_LETTER, fontweight="bold",
+        ha="left", va="top", zorder=10,
+        bbox=dict(boxstyle="round,pad=0.2", facecolor="white",
+                  edgecolor="none", alpha=0.85),
+    )
+
+
 def add_phenology_markers(
     ax: plt.Axes,
     phenology_df: pd.DataFrame,
@@ -149,9 +174,9 @@ def add_phenology_markers(
     Notes
     -----
     Marker colours are thesis-consistent:
-    * SoS → orange  (#FFA500)
-    * PoS → red     (#FF0000)
-    * EoS → purple  (#800080)
+    * SoS → yellow     (#F0E442)
+    * PoS → vermillion (#D55E00)
+    * EoS → sky blue   (#56B4E9)
     """
     draw_phenology_markers(ax, phenology_df, source=source, year=year)
 
@@ -211,12 +236,14 @@ def plot_site_publication(
     for col in lowess_cols:
         src = col.removeprefix(f"{NDVI_LOWESS_FIELD} ")
         color = source_color(src)
-        linestyle = "--" if src.upper().startswith("NSRS") else "-"
+        is_nsrs = src.upper().startswith("NSRS")
         dates_plot, vals_plot = dense_interpolate_with_gaps(
             ts_unix, site_df[col].values, WIDE_GAP_SECONDS
         )
         ax.plot(dates_plot, vals_plot, label=src, color=color,
-                linewidth=2.0, linestyle=linestyle)
+                linewidth=NSRS_LINEWIDTH if is_nsrs else SATELLITE_LINEWIDTH,
+                linestyle=NSRS_LINESTYLE if is_nsrs else "-",
+                zorder=4 if is_nsrs else 3)
 
     # Phenology markers — drawn before legend so they appear in it
     if phenology_df is not None and not phenology_df.empty:
@@ -225,7 +252,7 @@ def plot_site_publication(
     ax.set_ylabel("NDVI", fontsize=12)
     ax.set_xlabel("Date", fontsize=12)
     ax.set_title(f"{site_name} — NDVI Time Series", fontsize=14, fontweight="bold")
-    ax.legend(loc="upper left", fontsize=9, framealpha=0.9)
+    ax.legend(loc="upper left", fontsize=FONT_SIZE_LEGEND, framealpha=0.9)
     _format_date_axis(ax)
 
     if has_rain:
@@ -234,11 +261,11 @@ def plot_site_publication(
         rain_mask = np.isfinite(rain_vals)
         rain_dates = pd.to_datetime(ts_unix[rain_mask], unit="s")
         ax2.bar(rain_dates, rain_vals[rain_mask], alpha=0.22,
-                color=COLORS.get("rainfall", "steelblue"),
+                color=COLORS.get("rainfall", "#56B4E9"),
                 width=5, label="Rainfall (mm)", zorder=0)
         ax2.invert_yaxis()
         ax2.set_ylabel("Rainfall (mm)", fontsize=10)
-        ax2.legend(loc="upper right", fontsize=9)
+        ax2.legend(loc="upper right", fontsize=FONT_SIZE_LEGEND)
 
     if has_temp:
         ax3 = ax.twinx()
@@ -248,10 +275,10 @@ def plot_site_publication(
         temp_mask = np.isfinite(temp_vals)
         temp_dates = pd.to_datetime(ts_unix[temp_mask], unit="s")
         ax3.plot(temp_dates, temp_vals[temp_mask],
-                 color=COLORS.get("temperature", "red"),
+                 color=COLORS.get("temperature", "#999999"),
                  linewidth=1.2, linestyle=":", label="Temp (°C)")
         ax3.set_ylabel("Temperature (°C)", fontsize=10)
-        ax3.legend(loc="lower right", fontsize=9)
+        ax3.legend(loc="lower right", fontsize=FONT_SIZE_LEGEND)
 
     fig.tight_layout()
 
@@ -327,8 +354,8 @@ def plot_decomposition_comparative(
 
     sat_col = f"{NDVI_LOWESS_FIELD} {satellite_name}"
     sat_color = source_color(satellite_name)
-    woody_color = COLORS.get("woody", "#5B4A3F")
-    herb_color = COLORS.get("herbaceous", "#4CAF50")
+    woody_color = COLORS.get("woody", "#E69F00")
+    herb_color = COLORS.get("herbaceous", "#009E73")
 
     panels = [
         {
@@ -369,7 +396,7 @@ def plot_decomposition_comparative(
     fig, axes = plt.subplots(3, 1, figsize=figsize or (18, 12), sharex=True)
     ts_unix = site_df.index.values
 
-    for ax, panel in zip(axes, panels):
+    for ax, panel, letter in zip(axes, panels, "ABC"):
         # Satellite / decomposed component
         sat_s = panel["sat_series"]
         if sat_s is not None and not sat_s.dropna().empty:
@@ -379,7 +406,7 @@ def plot_decomposition_comparative(
             )
             ax.plot(dates_plot, vals_plot,
                     label=panel["sat_label"], color=panel["sat_color"],
-                    linewidth=2.2, linestyle="-")
+                    linewidth=SATELLITE_LINEWIDTH, linestyle="-", zorder=3)
 
         # NSRS sensor
         nsrs_col = panel["nsrs_col"]
@@ -389,16 +416,21 @@ def plot_decomposition_comparative(
             )
             ax.plot(dates_nsrs, vals_nsrs,
                     label=panel["nsrs_label"], color=panel["nsrs_color"],
-                    linewidth=1.8, linestyle="--")
+                    linewidth=NSRS_LINEWIDTH, linestyle=NSRS_LINESTYLE, zorder=4)
         else:
             ax.text(0.5, 0.5, f"{nsrs_col} not available",
                     transform=ax.transAxes, ha="center", va="center",
                     fontsize=9, color="gray")
 
-        ax.set_ylabel(panel["ylabel"], fontsize=11)
-        ax.set_title(panel["title"], fontsize=11, fontweight="bold")
-        ax.legend(loc="upper left", fontsize=9, framealpha=0.9)
+        ax.set_ylabel(panel["ylabel"])
+        ax.set_title(panel["title"])
+        ax.legend(loc="upper right", fontsize=FONT_SIZE_LEGEND, framealpha=0.9)
+        add_panel_letter(ax, letter)
         _format_date_axis(ax)
+
+    # Reviewer [37]: all panels on the same y-scale (equal span / tick spacing),
+    # so full-signal, woody and herbaceous magnitudes are directly comparable.
+    _equalize_y_span(axes)
 
     fig.suptitle(
         f"{site_name} — {satellite_name} woody/herbaceous decomposition vs NSRS",
@@ -407,10 +439,8 @@ def plot_decomposition_comparative(
     fig.tight_layout()
 
     if output_dir is not None:
-        out = Path(output_dir)
-        out.mkdir(parents=True, exist_ok=True)
-        path = out / f"{satellite_name}_decomposition_vs_NSRS.png"
-        fig.savefig(path, dpi=150, bbox_inches="tight")
+        save_figure(fig, output_dir, f"{satellite_name}_decomposition_vs_NSRS",
+                    dpi=SAVE_DPI)
 
     return fig
 
@@ -420,7 +450,25 @@ def plot_decomposition_comparative(
 # ---------------------------------------------------------------------------
 
 
+def _equalize_y_span(axes) -> None:
+    """Give *axes* the same y-axis span (largest current span), each centred on its own data.
+
+    Tick spacing is then directly comparable between panels even when the
+    panels have different offsets (e.g. woody NDVI vs herbaceous ΔNDVI).
+    Panels with no plotted data are ignored: their default (0, 1) limits would
+    otherwise set the span for every other panel.
+    """
+    axes = [ax for ax in axes if ax.has_data()]
+    if not axes:
+        return
+    limits = [ax.get_ylim() for ax in axes]
+    span = max(hi - lo for lo, hi in limits)
+    for ax, (lo, hi) in zip(axes, limits):
+        mid = (lo + hi) / 2
+        ax.set_ylim(mid - span / 2, mid + span / 2)
+
+
 def _format_date_axis(ax: plt.Axes) -> None:
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m"))
     ax.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
-    plt.setp(ax.get_xticklabels(), rotation=45, ha="right", fontsize=9)
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right", fontsize=FONT_SIZE_TICK_DATE)

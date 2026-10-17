@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import List, Optional
 
+import numpy as np
 import pandas as pd
 
 from lensky_py_lab.configs import SourceConfig
 from lensky_py_lab.constants import (
-    AVERAGE_GROUP_SIZE,
     NDVI_CLEAN_FIELD,
     NDVI_FILTERED_FIELD,
     NDVI_RAW_FIELD,
@@ -39,53 +39,55 @@ def filter_extreme_values(df: pd.DataFrame, config: SourceConfig) -> pd.DataFram
     return df
 
 
-def filter_by_average_groups(
-    df: pd.DataFrame,
-    config: SourceConfig,
-    group_size: int = AVERAGE_GROUP_SIZE,
-) -> pd.DataFrame:
-    """Outlier-emphasis filter from the original research pipeline.
+# Scale factor that makes the median absolute deviation comparable to a
+# standard deviation for normally distributed noise.
+_MAD_TO_SIGMA = 1.4826
 
-    Retains a value when its absolute deviation from the **global** mean of all
-    filtered values is >= average_window; discards it otherwise.
 
-    This matches the notebook's actual (accidental) behaviour: the original loop
-    used a Unix timestamp as the positional variable ``i``, so ``i - i - 3``
-    always evaluated to ``-3`` (clamped to index 1) and ``i + 3`` always exceeded
-    ``len(df)`` (clamped to len), making the "local window" span the entire
-    series.  The effective reference was therefore the global series mean, not a
-    ±3-row neighbourhood.  Using a true local window was significantly more
-    aggressive and produced far fewer surviving points than expected.
+def filter_outliers_sliding_window(df: pd.DataFrame, config: SourceConfig) -> pd.DataFrame:
+    """Sliding-window outlier detection on ``NDVI filtered`` → ``NDVI clean``.
 
-    If average_window is None, NDVI_FILTERED_FIELD is copied to NDVI_CLEAN_FIELD
-    without modification.
+    For every observation the reference is the **median** of the centred window
+    of ``config.outlier_window`` observations around it (at least 3 at the series
+    edges). The point is removed when its residual from that median exceeds
+
+        max(outlier_k × 1.4826 × MAD, outlier_min_threshold)
+
+    where MAD is the median absolute residual over a wider centred window
+    (``outlier_scale_window`` observations). The median keeps a spike from
+    pulling its own reference, and the MAD-based threshold adapts to how noisy
+    that stretch of the series is, so steep rising/falling limbs are not
+    mistaken for outliers.
+
+    The window counts *observations*, not days, so it suits dense series (daily
+    ground sensors); on sparse series it spans a longer time interval.
+
+    If ``config.outlier_window`` is None the filtered values are copied to
+    ``NDVI clean`` unchanged.
     """
     df = df.copy()
+    x = pd.to_numeric(df[NDVI_FILTERED_FIELD], errors="coerce")
 
-    if config.average_window is None:
-        df[NDVI_CLEAN_FIELD] = df[NDVI_FILTERED_FIELD]
+    if config.outlier_window is None:
+        df[NDVI_CLEAN_FIELD] = x
         return df
 
-    filtered_values: List[Optional[float]] = list(df[NDVI_FILTERED_FIELD])
-    non_null = [v for v in filtered_values if v is not None and not (isinstance(v, float) and pd.isna(v))]
-
-    if not non_null:
-        df[NDVI_CLEAN_FIELD] = [None] * len(filtered_values)
+    obs = x.dropna()
+    if obs.empty:
+        df[NDVI_CLEAN_FIELD] = x
         return df
 
-    global_mean = sum(non_null) / len(non_null)
-    clean: list[Optional[float]] = []
+    w = int(config.outlier_window)
+    scale_w = max(int(config.outlier_scale_window), w)
+    med = obs.rolling(w, center=True, min_periods=min(3, w)).median()
+    resid = obs - med
+    sigma = _MAD_TO_SIGMA * resid.abs().rolling(
+        scale_w, center=True, min_periods=min(7, scale_w)
+    ).median()
+    threshold = np.maximum(config.outlier_k * sigma.fillna(0.0), config.outlier_min_threshold)
+    keep = resid.abs() <= threshold
 
-    for val in filtered_values:
-        if val is None or (isinstance(val, float) and pd.isna(val)):
-            clean.append(None)
-            continue
-        if abs(global_mean - float(val)) >= config.average_window:
-            clean.append(float(val))
-        else:
-            clean.append(None)
-
-    df[NDVI_CLEAN_FIELD] = clean
+    df[NDVI_CLEAN_FIELD] = obs.where(keep).reindex(df.index)
     return df
 
 

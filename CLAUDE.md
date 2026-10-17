@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Python package for the **Lensky Lab at Bar-Ilan University** to access and analyze Remote Sensing / GIS time-series data (NDVI vegetation indices). The research involves correlating ground-based NSRS sensors, multiple satellite sources (MODIS, Sentinel-2, Landsat-8), and IMS meteorological data, as published in Derhi (2025) MSc thesis. The prior research prototype lives in [archive/research_base_notebook.ipynb](archive/research_base_notebook.ipynb).
 
-> **Note**: The lab PI's surname is **Lensky** (not Lenski — unrelated to Richard Lenski's E. coli LTEE). The GitHub repo is still named `lenski-py-lab`; rename to `lensky-py-lab` is pending.
+> **Note**: The lab PI's surname is **Lensky** (not Lenski — unrelated to Richard Lenski's E. coli LTEE). The GitHub repo is `github.com/omriderhi/lensky-py-lab` (public).
 
 ## Commands
 
@@ -59,7 +59,7 @@ src/lensky_py_lab/
 │   ├── site.py           # Site — main analysis object
 │   └── source.py         # DataSource — one satellite or NSRS sensor
 ├── pipeline/
-│   ├── cleaner.py        # filter_extreme_values, filter_by_average_groups
+│   ├── cleaner.py        # filter_extreme_values, filter_outliers_sliding_window
 │   ├── smoother.py       # add_lowess (statsmodels LOWESS)
 │   └── processor.py      # process_source — runs the full pipeline
 ├── clients/
@@ -70,7 +70,7 @@ src/lensky_py_lab/
 ├── phenology/
 │   └── phenolopy_integration.py  # extract_phenology, decompose_woody_herbaceous
 ├── sensors/
-│   ├── nsrs_calibration.py       # NSRS_3 ×1.4 calibration, 4-panel figure
+│   ├── nsrs_calibration.py       # NSRS_3 data-derived calibration, 4-panel figure
 │   └── daily_graphs.py           # load_dat_dir/file, intra-day NDVI figures
 ├── plotting/
 │   └── plotter.py        # plot_cleaning_pipeline, plot_site, plot_data_availability
@@ -84,12 +84,13 @@ Scripts in `scripts/`:
 - `run_rh_ndvi.py` — full RH_NDVI pipeline (steps 1–11)
 - `example_rh_ndvi.py` — minimal end-to-end example
 - `run_daily_graphs.py` — standalone intra-day NSRS figures from `.dat` files
+- `fov_canopy_fraction.py` — share of the NSRS_3 signal coming from the crown (reviewer [18]); defaults are placeholders and the script says so when used
 - `_gen_local_notebook.py` — one-off: generates a local copy of the archive notebook
 
 ## Data flow
 
 1. **Load** — `DataSource.from_csv()` or `DataSource.from_dataframe()` (GEE output)
-2. **Process** — `DataSource.process()` runs: extreme filter → average-group filter → LOWESS
+2. **Process** — `DataSource.process()` runs: extreme filter → sliding-window outlier filter → LOWESS
 3. **Assemble** — `Site(nsrs_sources={…}, satellite_sources={…}, ims_data=df)`
 4. **Analyse** — `site.run_analysis()` → joins all LOWESS columns into a single timestamp-indexed DataFrame
 5. **Phenology** — `extract_phenology(site_df)` → SoS / PoS / EoS per satellite per year
@@ -104,23 +105,30 @@ Scripts in `scripts/`:
 - GEE support is an optional extra (`pip install lensky-py-lab[gee]`); `earthengine-api` is not imported at module load time.
 - Hydrological year Y = Sep (Y-1) through Aug Y, matching Mediterranean growing season.
 
+## Outlier filter
+
+`filter_outliers_sliding_window()` (pipeline/cleaner.py): a point is removed when it deviates from the median of its centred `outlier_window` observations (default 7 in the scripts) by more than `max(outlier_k × 1.4826 × MAD, outlier_min_threshold)` (k = 3, floor 0.02 NDVI; MAD over a 31-observation window). The earlier `average_window` rule (a mean-deviation test against the global mean that kept outliers and dropped ordinary values) was removed; `SourceConfig.from_notebook_dict` raises if it sees `average_window`. The satellite sources use the same filter with the same settings, but those settings have not been audited — see `docs/features/satellite-data-cleaning-audit.md`.
+
+`extract_phenology()` reports an end of season only if the curve falls below the threshold before the record ends; otherwise `EoS_censored` is True and `EoS_date` / `EoS_value` / `EoS_doy` are NaT / NaN.
+
 ## Phenological markers
 
 Extracted by `extract_phenology()` using a **native scipy/Savitzky-Golay seasonal-amplitude** implementation — no external Phenolopy dependency.
 
-- **SoS** (Start of Season) — onset of herbaceous green-up after autumn rain; colour: `#FFA500`
-- **PoS** (Peak of Season) — maximum NDVI, typically January–April in Mediterranean; colour: `#FF0000`
-- **EoS** (End of Season) — dry-season senescence, typically March–May; colour: `#800080`
+- **SoS** (Start of Season) — onset of herbaceous green-up after autumn rain; colour: `#F0E442` (yellow)
+- **PoS** (Peak of Season) — maximum NDVI, typically January–April in Mediterranean; colour: `#D55E00` (vermillion)
+- **EoS** (End of Season) — dry-season senescence, typically March–May; colour: `#56B4E9` (sky blue)
 
 Markers are rendered as colored scatter points (▲ SoS, ● PoS, ▼ EoS) on comparative plots (NSRS vs satellite). They are **not** drawn on the main time-series figure.
 
 ## NSRS_3 calibration
 
 NSRS_3 has a wide-angle lens that captured sky reflectance due to sensor pole tilt.  
-Correction: `corrected_NDVI = raw_NDVI × 1.4` (Derhi, 2025 — **not** 0.4).  
-`NSRS3_PUBLISHED_FACTOR = 1.4` in `sensors/nsrs_calibration.py`.
+Correction: `corrected_NDVI = raw_NDVI × factor`, where the factor is **derived from the data** — the RMSE-minimising multiplier against the mean of NSRS_1 and NSRS_2 (`calibrate_nsrs3_sources()` in `sensors/nsrs_calibration.py`). It is applied to the NSRS_3 / NSRS_3_B LOWESS columns and registered via `get_active_factor()`. The earlier hardcoded value 1.4 (**not** 0.4) survives only as `NSRS3_PUBLISHED_FACTOR`, for comparison; it is never applied. The manuscript (v12) reports the optimum, 1.36, which the derived 1.364 reproduces.
 
-Validation (n=296 co-observations): optimal factor = 1.36, confirming the published 1.4 is near-optimal. RMSE improves from 0.149 → 0.030 after correction.
+Validation (n=470 co-observations, sliding-window cleaning): derived factor = 1.384 (earlier code: 1.4; the manuscript's 1.36 predates the cleaning fix). RMSE improves from 0.159 → 0.0405 at the derived factor (0.0409 at ×1.4); R² = 0.899.
+
+Calibration is **optional**: nothing in the package requires it. `run_rh_ndvi.py --nsrs3-factor auto|none|<number>` (default `auto`) derives it, skips it, or applies a fixed value; the validation figure/CSV (step 9) only runs in `auto` mode. Applying twice raises, and each run clears any previous factor. Do not hardcode a factor anywhere; RMSE is computed by the single `metrics.rmse()`. `get_logger_ndvi` (daily graphs) only calibrates sensor 3 if a factor is registered in the same process. `run_rh_ndvi.py` registers it before its daily-graph step; the standalone `run_daily_graphs.py` takes the same `--nsrs3-factor auto|none|<number>` (auto needs `--data-dir`/`RH_DATA_DIR` with the NSRS CSVs) and otherwise leaves sensor 3 uncalibrated.
 
 ## Figure outputs
 
