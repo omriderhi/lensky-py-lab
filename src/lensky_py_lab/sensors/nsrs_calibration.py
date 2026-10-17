@@ -315,8 +315,8 @@ def create_calibration_figure(
         apply_publication_style()
     except ImportError:
         COLORS = {
-            "nsrs1": "#D55E00", "nsrs2": "#CC79A7",
-            "nsrs3_raw": "#999999", "nsrs3_corrected": "#000000",
+            "nsrs1": "#5BAA3C", "nsrs2": "#6B3E1A",
+            "nsrs3_raw": "#999999", "nsrs3_corrected": "#7D7226",
         }
 
     reference = _align_mean(nsrs1, nsrs2)

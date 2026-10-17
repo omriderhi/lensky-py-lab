@@ -38,6 +38,10 @@ WONG = {
     "vermillion":      "#D55E00",
     "reddish_purple":  "#CC79A7",
     "gray":            "#999999",   # not part of Wong; neutral companion
+    # NSRS ground-sensor palette (green / brown / olive-brown mixture); not Wong colours
+    "nsrs_green":      "#5BAA3C",   # NSRS_1, herbaceous understory
+    "nsrs_brown":      "#6B3E1A",   # NSRS_2, pine canopy
+    "nsrs_olive":      "#7D7226",   # NSRS_3, mixed signal (between the two)
 }
 
 COLORS = {
@@ -53,10 +57,10 @@ COLORS = {
     "planet":            WONG["reddish_purple"],
 
     # In-situ sensors
-    "nsrs1":             WONG["vermillion"],
-    "nsrs2":             WONG["reddish_purple"],
+    "nsrs1":             WONG["nsrs_green"],
+    "nsrs2":             WONG["nsrs_brown"],
     "nsrs3_raw":         WONG["gray"],             # uncorrected
-    "nsrs3_corrected":   WONG["black"],            # corrected
+    "nsrs3_corrected":   WONG["nsrs_olive"],       # corrected
 
     # Phenological markers (shape also encodes type: ^ SoS, o PoS, v EoS)
     "sos":               WONG["yellow"],           # Start of Season

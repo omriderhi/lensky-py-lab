@@ -87,9 +87,9 @@ try:
 except ImportError:
     _HAS_PLOT_CONFIG = False
     COLORS: Dict[str, str] = {
-        "nsrs1": "#D55E00",
-        "nsrs2": "#CC79A7",
-        "nsrs3_corrected": "#000000",
+        "nsrs1": "#5BAA3C",
+        "nsrs2": "#6B3E1A",
+        "nsrs3_corrected": "#7D7226",
         "woody": "#E69F00",
         "herbaceous": "#009E73",
     }
@@ -111,9 +111,9 @@ _BAND_COLS = {
 _NDVI_COLS   = {1: "NDVI_1_Avg", 2: "NDVI_2_Avg", 3: "NDVI_3_Avg"}
 
 _SENSOR_COLORS = {
-    1: COLORS.get("nsrs1",           "#D55E00"),
-    2: COLORS.get("nsrs2",           "#CC79A7"),
-    3: COLORS.get("nsrs3_corrected", "#000000"),
+    1: COLORS.get("nsrs1",           "#5BAA3C"),
+    2: COLORS.get("nsrs2",           "#6B3E1A"),
+    3: COLORS.get("nsrs3_corrected", "#7D7226"),
 }
 
 # Semantic labels and colors matching the original research script

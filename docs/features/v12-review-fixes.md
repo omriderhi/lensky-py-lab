@@ -130,6 +130,11 @@ The console line used to print the RMSE at the optimal factor as "after". It now
 
 **Check:** NSRS LOWESS reaches the last observation; `EoS_censored` rows draw only SoS/PoS markers.
 
+### 10. NSRS colour palette: green / brown / olive-brown
+**Files:** `plot_config.py` (single source), fallback copies in `sensors/daily_graphs.py`, `sensors/nsrs_calibration.py`, `visualization/figure_generator.py`
+
+NSRS_1 (herbaceous) is leaf green `#5BAA3C`, NSRS_2 (pine canopy) is dark brown `#6B3E1A`, NSRS_3 (mixed signal) is olive-brown `#7D7226`, between the two. The `_B` variants inherit them. NSRS_3 raw stays gray. The three differ in lightness as well as hue, to stay separable for colour-vision deficiency. As a side effect NSRS_1 no longer shares vermillion with the PoS marker (the colour clash in *Not changed* item 4 is resolved for NSRS_1; markers still carry no sensor identity). Colours only; no numbers change.
+
 ## Not part of the diff
 
 - Regenerated outputs go to a `data/results_*/` directory (ignored). `data/results_regen_2026-10-15/` was produced in a different environment (timestamps up to 3 h off, values up to 4e-4 off) and is **not** a valid baseline for the current code.
@@ -141,7 +146,7 @@ The console line used to print the RMSE at the optimal factor as "after". It now
 1. **Woody baseline evaluated at integer calendar year.** `decompose_woody_herbaceous()` evaluates the linear trend at `times.year`, giving a staircase with steps on 1 Jan. Fractional time would be smoother but would shift Table 4.
 2. **Herbaceous comparison mixes units.** Table 4 and decomposition panel C compare herbaceous ΔNDVI against NSRS_1's absolute NDVI (MAE 0.43, bias −0.43).
 3. **NSRS_2 in phenology output and figures.** The manuscript excludes NSRS_2 from Table 3 as "near-constant", but the data show an ~0.2 NDVI seasonal swing.
-4. **Marker/line colour clash.** NSRS_1's line and the PoS marker are both `#D55E00`, and markers carry no sensor identity.
+4. **Markers carry no sensor identity.** The NSRS_1 / PoS colour clash was removed by change 10, but nothing links a marker to its sensor.
 5. **In-figure titles** with internal names (`RH_NDVI — NSRS vs MODIS`).
 6. **Phenology method naming.** The manuscript names Phenolopy, but the code is a native Savitzky–Golay + 20 % seasonal-amplitude implementation. Only the manuscript text needs to change.
 7. **Manuscript edits.** The comparison against the regenerated outputs is done (`manuscript-comparison.md`); the manuscript itself has not been edited. Decision taken: the manuscript is aligned to the derived factor. After change 9 the derived factor is 1.384, not 1.36, so the comparison numbers in `manuscript-comparison.md` that were stated at 1.364 are superseded; see its second section.
