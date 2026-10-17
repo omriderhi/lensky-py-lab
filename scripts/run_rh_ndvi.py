@@ -88,8 +88,10 @@ from lensky_py_lab.phenology.phenolopy_integration import (
 )
 from lensky_py_lab.plotting.plotter import plot_cleaning_pipeline, plot_site, plot_data_availability
 from lensky_py_lab.sensors.nsrs_calibration import (
+    apply_nsrs3_factor,
+    calibrate_nsrs3_sources,
+    clear_active_factor,
     create_calibration_figure,
-    find_optimal_calibration_factor,
     save_calibration_statistics,
 )
 from lensky_py_lab.sensors.daily_graphs import (
@@ -118,12 +120,10 @@ NOTEBOOK_CONFIGS: dict = {
     # Ground sensors
     "NSRS_1":   {"min": 0.2,    "max": False,  "average_window": 0.05,   "images_per_month": 30},
     "NSRS_2":   {"min": 0.2,    "max": False,  "average_window": 0.05,   "images_per_month": 30},
-    "NSRS_3":   {"min": 0.2,    "max": False,  "average_window": 0.05,   "images_per_month": 30,
-                 "general_factor": 1.4},   # wide-angle sky-catch correction ×1.4
+    "NSRS_3":   {"min": 0.2,    "max": False,  "average_window": 0.05,   "images_per_month": 30},   # NSRS_3 factor is derived from the data (calibrate_nsrs3_sources)
     "NSRS_1_B": {"min": 0.2,    "max": False,  "average_window": 0.05,   "images_per_month": 30},
     "NSRS_2_B": {"min": 0.2,    "max": False,  "average_window": 0.05,   "images_per_month": 30},
-    "NSRS_3_B": {"min": 0.2,    "max": False,  "average_window": 0.05,   "images_per_month": 30,
-                 "general_factor": 1.4},
+    "NSRS_3_B": {"min": 0.2,    "max": False,  "average_window": 0.05,   "images_per_month": 30},
 }
 
 # Which sources are ground sensors (NSRS) vs satellite
@@ -136,7 +136,10 @@ _NSRS_BASE_NAMES = {k for k in NOTEBOOK_CONFIGS if k.startswith("NSRS") and not 
 # Main pipeline
 # ────────────────────────────────────────────────────────────────────────────
 
-def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = None) -> None:
+def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = None,
+        nsrs3_factor: str = "auto") -> None:
+    """``nsrs3_factor``: ``"auto"`` derives the NSRS_3 factor from the data,
+    ``"none"`` leaves NSRS_3 uncalibrated, a number applies that fixed factor."""
     # ── output sub-directories ───────────────────────────────────────────────
     out_cleaning      = out_dir / "figures" / "data_cleaning" / "RH_NDVI"
     out_final         = out_dir / "figures" / "final"
@@ -180,6 +183,23 @@ def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = 
             nsrs_sources[source_name] = ds
         else:
             sat_sources[source_name] = ds
+
+    # ── NSRS_3 sky-catch factor (optional): derive from data, fixed, or none ──
+    clear_active_factor()   # never inherit a factor from an earlier run in this process
+    calib_result, nsrs3_raw = None, None
+    mode = str(nsrs3_factor).lower()
+    if mode == "auto":
+        try:
+            calib_result, nsrs3_raw = calibrate_nsrs3_sources(nsrs_sources)
+            print(f"  NSRS_3 factor derived from data: {calib_result['optimal_factor']:.3f} "
+                  f"(thesis: {calib_result['published_factor']})")
+        except ValueError as exc:
+            warnings.warn(f"NSRS_3 calibration skipped: {exc}")
+    elif mode == "none":
+        print("  NSRS_3 calibration disabled — NSRS_3 left uncalibrated.")
+    else:
+        apply_nsrs3_factor(nsrs_sources, float(nsrs3_factor))
+        print(f"  NSRS_3 fixed factor applied: {float(nsrs3_factor):.3f}")
 
     # ── Pass B: generate data-cleaning figures ───────────────────────────────
     # NSRS base sources are merged with their _B variant and plotted once.
@@ -341,7 +361,11 @@ def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = 
     print("Step 9: NSRS_3 calibration validation")
     print("=" * 60)
 
-    nsrs3_result = _run_calibration(site_df, out_calib, out_dir)
+    if calib_result is not None:
+        nsrs3_result = _run_calibration(calib_result, nsrs3_raw, site_df, out_calib, out_dir)
+    else:
+        nsrs3_result = None
+        print("  Skipped (needs --nsrs3-factor auto).")
 
     # ── Step 10: Woody / herbaceous decomposition (all satellites) ──────────
     print()
@@ -454,30 +478,23 @@ def _nsrs_timeframe(site_df: pd.DataFrame):
     return int(nsrs_sub.index.min()), int(nsrs_sub.index.max())
 
 
-def _run_calibration(site_df: pd.DataFrame, out_calib: Path, out_dir: Path) -> dict | None:
-    """Run NSRS_3 calibration validation and save figure + statistics."""
-    nsrs3_raw_col  = f"{NDVI_LOWESS_FIELD} NSRS_3"
-    nsrs1_col = f"{NDVI_LOWESS_FIELD} NSRS_1"
-    nsrs2_col = f"{NDVI_LOWESS_FIELD} NSRS_2"
+def _run_calibration(calib_result: dict, nsrs3_raw: pd.Series, site_df: pd.DataFrame,
+                     out_calib: Path, out_dir: Path) -> dict:
+    """Save the NSRS_3 calibration validation figure + statistics.
 
-    missing = [c for c in (nsrs3_raw_col, nsrs1_col, nsrs2_col) if c not in site_df.columns]
-    if missing:
-        warnings.warn(f"Calibration skipped — missing columns: {missing}")
-        return None
+    ``calib_result`` / ``nsrs3_raw`` come from ``calibrate_nsrs3_sources``: the factor
+    was derived from the unscaled series and already applied to the NSRS_3 sources.
+    """
+    nsrs1 = site_df[f"{NDVI_LOWESS_FIELD} NSRS_1"].dropna()
+    nsrs2 = site_df[f"{NDVI_LOWESS_FIELD} NSRS_2"].dropna()
 
-    # NOTE: site_df already has NSRS_3 with ×1.4 applied via general_factor in the
-    # processing config. To validate the factor we back out the raw (÷1.4) values.
-    nsrs3_corrected = site_df[nsrs3_raw_col].dropna()
-    nsrs3_raw       = (nsrs3_corrected / 1.4).rename("NSRS_3_raw")
-    nsrs1           = site_df[nsrs1_col].dropna()
-    nsrs2           = site_df[nsrs2_col].dropna()
-    reference       = (nsrs1.add(nsrs2, fill_value=np.nan) / 2).dropna()
-
-    calib_result = find_optimal_calibration_factor(nsrs3_raw, reference)
-    print(f"  Optimal factor: {calib_result['optimal_factor']:.3f}  "
-          f"(published: {calib_result['published_factor']})")
-    print(f"  RMSE before: {calib_result['rmse_raw']:.4f}  "
-          f"after: {calib_result['rmse_corrected']:.4f}")
+    print(f"  Applied (data-derived) factor: {calib_result['optimal_factor']:.3f}  "
+          f"(thesis: {calib_result['published_factor']})")
+    print(f"  RMSE raw: {calib_result['rmse_raw']:.4f}  "
+          f"published ×{calib_result['published_factor']}: "
+          f"{calib_result['published_factor_rmse']:.4f}  "
+          f"(optimal ×{calib_result['optimal_factor']:.3f}: "
+          f"{calib_result['rmse_corrected']:.4f})")
     print(f"  R² before: {calib_result['r2_raw']:.4f}  "
           f"after: {calib_result['r2_corrected']:.4f}")
 
@@ -626,6 +643,14 @@ def _parse_args() -> argparse.Namespace:
             "If omitted, a directory containing .dat files is searched next to --data-dir."
         ),
     )
+    p.add_argument(
+        "--nsrs3-factor",
+        default="auto",
+        help=(
+            "NSRS_3 sky-catch correction: 'auto' derives it from the data (default), "
+            "'none' leaves NSRS_3 uncalibrated, or a number (e.g. 1.4) applies that factor."
+        ),
+    )
     return p.parse_args()
 
 
@@ -636,4 +661,5 @@ if __name__ == "__main__":
         ims_dir=Path(args.ims_dir),
         out_dir=Path(args.out_dir),
         dat_dir=Path(args.dat_dir) if args.dat_dir else None,
+        nsrs3_factor=args.nsrs3_factor,
     )

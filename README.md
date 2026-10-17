@@ -8,13 +8,13 @@ Python package for the **Lensky Lab at Bar-Ilan University** — accessing and a
 
 | Site | Location | Sensors |
 |---|---|---|
-| Ramat Hanadiv (RH) | Mount Carmel foothills, Israel | NSRS_1, NSRS_2, NSRS_3 (calibrated ×1.4) |
+| Ramat Hanadiv (RH) | Mount Carmel foothills, Israel | NSRS_1, NSRS_2, NSRS_3 (calibrated, factor derived from data) |
 
 ## Satellite data sources
 
 | Source | Collection | NDVI computation |
 |---|---|---|
-| MODIS | `MODIS/061/MOD13Q1` | Direct (`NDVI × 0.0001`) |
+| MODIS | `MODIS/061/MOD09GQ` (daily, 250 m) | `(sur_refl_b02−sur_refl_b01)/(sur_refl_b02+sur_refl_b01)` |
 | Sentinel-2 | `COPERNICUS/S2_SR_HARMONIZED` | `(B8−B4)/(B8+B4)` |
 | Landsat-8 | `LANDSAT/LC08/C02/T1_L2` | `(SR_B5−SR_B4)/(SR_B5+SR_B4)` |
 | VENuS | CSV files | Pre-computed |
@@ -162,9 +162,9 @@ from lensky_py_lab.sensors.nsrs_calibration import (
     create_calibration_figure,
 )
 
-# Derive and confirm the ×1.4 empirical correction factor
+# Derive the empirical NSRS_3 correction factor from the data
 result = find_optimal_calibration_factor(nsrs3_raw, reference)
-print(f"Optimal factor: {result['optimal_factor']:.2f}")   # → ~1.40
+print(f"Optimal factor: {result['optimal_factor']:.2f}")   # → ~1.36
 
 # Apply to raw series
 nsrs3_corrected = apply_calibration(nsrs3_raw)

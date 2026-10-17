@@ -215,6 +215,9 @@ __marimo__/
 data/results/**
 !data/results/**/.gitkeep
 
+# Regenerated / review-check output directories (e.g. results_regen_2026-10-15)
+data/results_*/
+
 # Archive files (thesis document, large notebooks)
 archive/*.docx
 archive/research_base_notebook_local.ipynb

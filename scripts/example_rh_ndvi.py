@@ -20,6 +20,7 @@ import matplotlib; matplotlib.use("Agg")  # noqa: E402
 import matplotlib.pyplot as plt
 
 from lensky_py_lab import DataSource, Site, SourceConfig
+from lensky_py_lab.sensors.nsrs_calibration import calibrate_nsrs3_sources
 from lensky_py_lab.io.csv_loader import discover_ims_csvs_for_site, load_ims_csvs
 from lensky_py_lab.phenology import decompose_woody_herbaceous, extract_phenology
 from lensky_py_lab.plotting.plotter import plot_data_availability
@@ -56,10 +57,10 @@ CONFIGS = {
     "L8":       {"min": 0.4,  "max": False, "average_window": 0.1005, "images_per_month": 4},
     "NSRS_1":   {"min": 0.2,  "max": False, "average_window": 0.05,   "images_per_month": 30},
     "NSRS_2":   {"min": 0.2,  "max": False, "average_window": 0.05,   "images_per_month": 30},
-    "NSRS_3":   {"min": 0.2,  "max": False, "average_window": 0.05,   "images_per_month": 30, "general_factor": 1.4},
+    "NSRS_3":   {"min": 0.2,  "max": False, "average_window": 0.05,   "images_per_month": 30},
     "NSRS_1_B": {"min": 0.2,  "max": False, "average_window": 0.05,   "images_per_month": 30},
     "NSRS_2_B": {"min": 0.2,  "max": False, "average_window": 0.05,   "images_per_month": 30},
-    "NSRS_3_B": {"min": 0.2,  "max": False, "average_window": 0.05,   "images_per_month": 30, "general_factor": 1.4},
+    "NSRS_3_B": {"min": 0.2,  "max": False, "average_window": 0.05,   "images_per_month": 30},
 }
 
 # ── load & process (skips missing files gracefully) ───────────────────────────
@@ -69,6 +70,9 @@ sources = {
     for name, cfg in CONFIGS.items()
     if (DATA / f"{name}.csv").exists()
 }
+
+# ── (optional) derive the NSRS_3 sky-catch factor from the data; delete to skip ─────────────
+calibrate_nsrs3_sources({k: v for k, v in sources.items() if k.startswith("NSRS")})
 
 # ── build site & run analysis ─────────────────────────────────────────────────
 ims_df  = load_ims_csvs(discover_ims_csvs_for_site("RH_NDVI", IMS))

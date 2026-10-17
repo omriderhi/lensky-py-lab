@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Python package for the **Lensky Lab at Bar-Ilan University** to access and analyze Remote Sensing / GIS time-series data (NDVI vegetation indices). The research involves correlating ground-based NSRS sensors, multiple satellite sources (MODIS, Sentinel-2, Landsat-8), and IMS meteorological data, as published in Derhi (2025) MSc thesis. The prior research prototype lives in [archive/research_base_notebook.ipynb](archive/research_base_notebook.ipynb).
 
-> **Note**: The lab PI's surname is **Lensky** (not Lenski — unrelated to Richard Lenski's E. coli LTEE). The GitHub repo is still named `lenski-py-lab`; rename to `lensky-py-lab` is pending.
+> **Note**: The lab PI's surname is **Lensky** (not Lenski — unrelated to Richard Lenski's E. coli LTEE). The GitHub repo is `github.com/omriderhi/lensky-py-lab` (public).
 
 ## Commands
 
@@ -70,7 +70,7 @@ src/lensky_py_lab/
 ├── phenology/
 │   └── phenolopy_integration.py  # extract_phenology, decompose_woody_herbaceous
 ├── sensors/
-│   ├── nsrs_calibration.py       # NSRS_3 ×1.4 calibration, 4-panel figure
+│   ├── nsrs_calibration.py       # NSRS_3 data-derived calibration, 4-panel figure
 │   └── daily_graphs.py           # load_dat_dir/file, intra-day NDVI figures
 ├── plotting/
 │   └── plotter.py        # plot_cleaning_pipeline, plot_site, plot_data_availability
@@ -117,10 +117,11 @@ Markers are rendered as colored scatter points (▲ SoS, ● PoS, ▼ EoS) on co
 ## NSRS_3 calibration
 
 NSRS_3 has a wide-angle lens that captured sky reflectance due to sensor pole tilt.  
-Correction: `corrected_NDVI = raw_NDVI × 1.4` (Derhi, 2025 — **not** 0.4).  
-`NSRS3_PUBLISHED_FACTOR = 1.4` in `sensors/nsrs_calibration.py`.
+Correction: `corrected_NDVI = raw_NDVI × factor`, where the factor is **derived from the data** — the RMSE-minimising multiplier against the mean of NSRS_1 and NSRS_2 (`calibrate_nsrs3_sources()` in `sensors/nsrs_calibration.py`). It is applied to the NSRS_3 / NSRS_3_B LOWESS columns and registered via `get_active_factor()`. The thesis value 1.4 (Derhi, 2025 — **not** 0.4) survives only as `NSRS3_PUBLISHED_FACTOR`, for comparison; it is never applied.
 
-Validation (n=296 co-observations): optimal factor = 1.36, confirming the published 1.4 is near-optimal. RMSE improves from 0.149 → 0.030 after correction.
+Validation (n=296 co-observations): derived factor = 1.364 (thesis: 1.4). RMSE improves from 0.149 → 0.030 at the derived factor (0.033 at the thesis ×1.4). Using 1.364 instead of 1.4 scales NSRS_3 by ~0.974 versus the thesis outputs.
+
+Calibration is **optional**: nothing in the package requires it. `run_rh_ndvi.py --nsrs3-factor auto|none|<number>` (default `auto`) derives it, skips it, or applies a fixed value; the validation figure/CSV (step 9) only runs in `auto` mode. Applying twice raises, and each run clears any previous factor. Do not hardcode a factor anywhere; RMSE is computed by the single `metrics.rmse()`. `get_logger_ndvi` (daily graphs) only calibrates sensor 3 if a factor was derived earlier in the same run, otherwise it warns and leaves it uncalibrated.
 
 ## Figure outputs
 

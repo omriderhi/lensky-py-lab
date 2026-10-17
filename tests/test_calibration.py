@@ -18,6 +18,7 @@ import pytest
 from lensky_py_lab.sensors.nsrs_calibration import (
     NSRS3_PUBLISHED_FACTOR,
     apply_calibration,
+    set_active_factor,
     find_optimal_calibration_factor,
     save_calibration_statistics,
 )
@@ -188,10 +189,16 @@ class TestFindOptimalCalibrationFactor:
 
 
 class TestApplyCalibration:
-    def test_default_factor_is_published(self, nsrs3_raw):
+    def test_default_factor_is_active_factor(self, nsrs3_raw):
+        set_active_factor(1.37)
         corrected = apply_calibration(nsrs3_raw)
-        expected = nsrs3_raw * NSRS3_PUBLISHED_FACTOR
+        expected = nsrs3_raw * 1.37
         pd.testing.assert_series_equal(corrected, expected.rename(corrected.name))
+
+    def test_no_factor_raises(self, nsrs3_raw, monkeypatch):
+        monkeypatch.setattr("lensky_py_lab.sensors.nsrs_calibration._active_factor", None)
+        with pytest.raises(ValueError, match="No calibration factor"):
+            apply_calibration(nsrs3_raw)
 
     def test_custom_factor(self, nsrs3_raw):
         corrected = apply_calibration(nsrs3_raw, factor=1.2)
@@ -201,16 +208,16 @@ class TestApplyCalibration:
         )
 
     def test_output_name_has_corrected_suffix(self, nsrs3_raw):
-        corrected = apply_calibration(nsrs3_raw)
+        corrected = apply_calibration(nsrs3_raw, factor=1.4)
         assert "corrected" in str(corrected.name).lower()
 
     def test_index_preserved(self, nsrs3_raw):
-        corrected = apply_calibration(nsrs3_raw)
+        corrected = apply_calibration(nsrs3_raw, factor=1.4)
         pd.testing.assert_index_equal(corrected.index, nsrs3_raw.index)
 
     def test_values_greater_than_raw(self, nsrs3_raw):
         """Since factor > 1, corrected values should exceed raw."""
-        corrected = apply_calibration(nsrs3_raw)
+        corrected = apply_calibration(nsrs3_raw, factor=1.4)
         assert (corrected.values > nsrs3_raw.values).all()
 
 
@@ -247,3 +254,96 @@ class TestSaveCalibrationStatistics:
         csv_path = tmp_path / "nested" / "subdir" / "stats.csv"
         save_calibration_statistics(result, output_path=csv_path)
         assert csv_path.exists()
+
+
+# ---------------------------------------------------------------------------
+# Tests — calibrate_nsrs3_sources (factor derived from data, applied to sources)
+# ---------------------------------------------------------------------------
+
+
+class TestCalibrateNsrs3Sources:
+    def test_derives_and_applies_factor(self, nsrs3_raw, reference):
+        from types import SimpleNamespace
+
+        from lensky_py_lab.constants import NDVI_LOWESS_FIELD
+        from lensky_py_lab.sensors.nsrs_calibration import (
+            calibrate_nsrs3_sources,
+            get_active_factor,
+        )
+
+        def src(name, series):
+            df = pd.DataFrame({NDVI_LOWESS_FIELD: series})
+            return SimpleNamespace(
+                processed=df,
+                lowess_series=df[NDVI_LOWESS_FIELD].rename(f"{NDVI_LOWESS_FIELD} {name}"),
+            )
+
+        s3 = src("NSRS_3", nsrs3_raw)
+        sources = {
+            "NSRS_1": src("NSRS_1", reference),
+            "NSRS_2": src("NSRS_2", reference),
+            "NSRS_3": s3,
+        }
+        before = nsrs3_raw.copy()
+        result, raw = calibrate_nsrs3_sources(sources)
+
+        factor = result["optimal_factor"]
+        assert get_active_factor() == pytest.approx(factor)
+        assert factor == pytest.approx(1.4, abs=0.2)
+        pd.testing.assert_series_equal(raw, before.rename("NSRS_3_raw"))
+        np.testing.assert_allclose(
+            s3.processed[NDVI_LOWESS_FIELD].values, before.values * factor
+        )
+
+
+class TestCalibrationIsOptional:
+    @staticmethod
+    def _src(name, series):
+        from types import SimpleNamespace
+
+        from lensky_py_lab.constants import NDVI_LOWESS_FIELD
+
+        df = pd.DataFrame({NDVI_LOWESS_FIELD: series})
+        return SimpleNamespace(
+            processed=df,
+            lowess_series=df[NDVI_LOWESS_FIELD].rename(f"{NDVI_LOWESS_FIELD} {name}"),
+        )
+
+    def test_clear_active_factor(self):
+        from lensky_py_lab.sensors.nsrs_calibration import (
+            clear_active_factor,
+            get_active_factor,
+        )
+
+        set_active_factor(1.2)
+        clear_active_factor()
+        assert get_active_factor() is None
+
+    def test_missing_sensors_raises_value_error_and_leaves_data_untouched(self, nsrs3_raw):
+        from lensky_py_lab.constants import NDVI_LOWESS_FIELD
+        from lensky_py_lab.sensors.nsrs_calibration import calibrate_nsrs3_sources
+
+        s3 = self._src("NSRS_3", nsrs3_raw)
+        with pytest.raises(ValueError, match="missing columns"):
+            calibrate_nsrs3_sources({"NSRS_3": s3})
+        pd.testing.assert_series_equal(
+            s3.processed[NDVI_LOWESS_FIELD], nsrs3_raw.rename(NDVI_LOWESS_FIELD)
+        )
+
+    def test_applying_twice_is_refused(self, nsrs3_raw):
+        from lensky_py_lab.sensors.nsrs_calibration import apply_nsrs3_factor
+
+        sources = {"NSRS_3": self._src("NSRS_3", nsrs3_raw)}
+        apply_nsrs3_factor(sources, 1.4)
+        with pytest.raises(ValueError, match="already calibrated"):
+            apply_nsrs3_factor(sources, 1.4)
+
+    def test_logger_ndvi_uncalibrated_without_factor(self):
+        from lensky_py_lab.sensors.daily_graphs import get_logger_ndvi
+        from lensky_py_lab.sensors.nsrs_calibration import clear_active_factor
+
+        clear_active_factor()
+        df = pd.DataFrame({"NDVI_3_Avg": [0.2, 0.3]})
+        pd.testing.assert_series_equal(
+            get_logger_ndvi(df, 3), df["NDVI_3_Avg"].rename("NDVI_3_logger")
+        )
