@@ -137,10 +137,12 @@ value and 51 days at window >= 11. L8 (excluded) moves up to 0.20 / 36 days (no 
 - **Limitations:** S2 is effectively unfiltered at floor 0.08 and its result depends on window = 7 observations; MODIS 006 is deprecated;
   L8 cannot be reproduced from the research script.
 
+**Decision (author): `MODIS.csv` stays as the research export.** It is not re-extracted with the new tool; the tool reproduces it (collection 006: 1,112 of 1,112
+shared dates identical), and re-extraction would only swap 6 dates in and 1 out. It therefore has no entry in `gee_extraction_log.json`.
+
 ## 8. Not verified
 
 - Figures were not diffed against the manuscript (text and tables were: `manuscript-comparison-v13.md`); the `.docx` was not edited.
 - The 310-day shift of a MODIS marker at window 5 / k 2.5 was not traced to a specific season or marker.
 - The pairing behind the manuscript's per-sensor agreement numbers (Section 3.1) is undocumented.
 - Rule 3's threshold (5 dates) is a judgment call made after seeing the RH counts; other sites or periods may need another value.
-- MODIS was not re-extracted with the new tool (the existing file is the research export; re-extraction would swap 6 dates in and 1 out).
