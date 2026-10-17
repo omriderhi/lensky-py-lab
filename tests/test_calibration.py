@@ -18,6 +18,7 @@ import pytest
 from lensky_py_lab.sensors.nsrs_calibration import (
     NSRS3_PUBLISHED_FACTOR,
     apply_calibration,
+    create_calibration_figure,
     set_active_factor,
     find_optimal_calibration_factor,
     save_calibration_statistics,
@@ -294,6 +295,33 @@ class TestCalibrateNsrs3Sources:
         np.testing.assert_allclose(
             s3.processed[NDVI_LOWESS_FIELD].values, before.values * factor
         )
+
+
+class TestCalibrationFigurePanelA:
+    def _gapped_data(self):
+        # two coverage windows separated by a 200-day hole
+        day = 86400
+        t0 = int(pd.Timestamp("2019-01-01").timestamp())
+        idx = [t0 + i * day for i in range(100)] + [t0 + (300 + i) * day for i in range(100)]
+        ref = pd.Series(0.55 + 0.1 * np.sin(np.arange(200) / 10), index=idx, name="ref")
+        raw = (ref / 1.4).rename("raw")
+        return raw, ref
+
+    def test_panel_a_keeps_observations_and_breaks_at_gap(self, tmp_path):
+        import matplotlib.pyplot as plt
+
+        raw, ref = self._gapped_data()
+        fig = create_calibration_figure(raw, ref, ref, output_dir=tmp_path)
+        lines = {ln.get_label(): ln.get_ydata() for ln in fig.axes[0].get_lines()}
+        for label in ("NSRS_1", "NSRS_3 raw"):
+            y = np.asarray(lines[label], dtype=float)
+            assert np.isfinite(y).sum() == 200          # no resampling or dropped points
+            assert np.isnan(y).sum() == 1               # exactly one break (the gap)
+        corrected = [v for k, v in lines.items() if k.startswith("NSRS_3 corrected")][0]
+        raw_nan = np.where(np.isnan(np.asarray(lines["NSRS_3 raw"], dtype=float)))[0]
+        corr_nan = np.where(np.isnan(np.asarray(corrected, dtype=float)))[0]
+        assert list(raw_nan) == list(corr_nan)          # raw and corrected break together
+        plt.close(fig)
 
 
 class TestCalibrationIsOptional:

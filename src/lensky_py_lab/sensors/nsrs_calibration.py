@@ -47,6 +47,7 @@ import pandas as pd
 from scipy.stats import pearsonr
 
 from lensky_py_lab.constants import NDVI_LOWESS_FIELD
+from lensky_py_lab.gap_utils import boundaries_from_raw, iter_segments_from_boundaries
 from lensky_py_lab.metrics import rmse as _rmse
 
 # ---------------------------------------------------------------------------
@@ -333,27 +334,20 @@ def create_calibration_figure(
     # ------------------------------------------------------------------ #
     # Panel A — Time series
     # ------------------------------------------------------------------ #
-    dates = {
-        "raw":       pd.to_datetime(nsrs3_raw.index,       unit="s"),
-        "corrected": pd.to_datetime(nsrs3_corrected.index,  unit="s"),
-        "nsrs1":     pd.to_datetime(nsrs1.index,            unit="s"),
-        "nsrs2":     pd.to_datetime(nsrs2.index,            unit="s"),
-    }
     # Break lines at wide data gaps (same 60-day rule as every other time-series
-    # figure) instead of drawing straight interpolation across missing seasons.
-    from lensky_py_lab.gap_utils import dense_interpolate_with_gaps
+    # figure) instead of drawing straight lines across missing seasons. The
+    # observations themselves are plotted, not resampled. Raw and corrected NSRS_3
+    # share one set of segment boundaries so they always break at the same place.
+    nsrs3_bounds = _segment_boundaries(nsrs3_raw)
 
-    def _gapped(series: pd.Series):
-        s = series.dropna()
-        return dense_interpolate_with_gaps(s.index.values.astype(np.int64), s.values)
-
-    for series, key, label, extra in (
-        (nsrs1,           "nsrs1",           "NSRS_1",                        {}),
-        (nsrs2,           "nsrs2",           "NSRS_2",                        {}),
-        (nsrs3_raw,       "nsrs3_raw",       "NSRS_3 raw",                    {"alpha": 0.85}),
-        (nsrs3_corrected, "nsrs3_corrected", f"NSRS_3 corrected (×{factor:.3f})", {}),
+    for series, bounds, key, label, extra in (
+        (nsrs1, None, "nsrs1", "NSRS_1", {}),
+        (nsrs2, None, "nsrs2", "NSRS_2", {}),
+        (nsrs3_raw, nsrs3_bounds, "nsrs3_raw", "NSRS_3 raw", {"alpha": 0.85}),
+        (nsrs3_corrected, nsrs3_bounds, "nsrs3_corrected",
+         f"NSRS_3 corrected (×{factor:.3f})", {}),
     ):
-        d, v = _gapped(series)
+        d, v = _gapped_xy(series, bounds)
         ax_ts.plot(d, v, color=COLORS[key], label=label, linewidth=1.8, **extra)
     ax_ts.set_title("A — Time Series Comparison")
     ax_ts.set_xlabel("Date")
@@ -394,7 +388,7 @@ def create_calibration_figure(
                     label=f"Applied factor = {factor:.3f}")
     opt = calibration_result["optimal_factor"]
     ax_rmse.axvline(opt, color=COLORS["nsrs2"], linestyle=":", linewidth=1.5,
-                    label=f"Optimal factor = {opt:.2f}")
+                    label=f"Optimal factor = {opt:.3f}")
     ax_rmse.set_title("D — RMSE vs Correction Factor")
     ax_rmse.set_xlabel("Correction factor")
     ax_rmse.set_ylabel("RMSE")
@@ -443,6 +437,35 @@ def save_calibration_statistics(
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+def _segment_boundaries(series: pd.Series):
+    """(start, end) unix-second windows of continuous coverage (60-day gap rule)."""
+    s = series.dropna()
+    return boundaries_from_raw(s.index.values.astype(np.int64), s.values.astype(float))
+
+
+def _gapped_xy(series: pd.Series, boundaries=None):
+    """Dates and values of *series* with a NaN pen-lift between coverage segments.
+
+    Original observations are kept as-is (no resampling). Pass *boundaries* to
+    reuse another series' segmentation; by default they come from *series* itself.
+    """
+    s = series.dropna()
+    ts = s.index.values.astype(np.int64)
+    vals = s.values.astype(float)
+    if boundaries is None:
+        boundaries = boundaries_from_raw(ts, vals)
+    xs, ys = [], []
+    for i, (t, v) in enumerate(iter_segments_from_boundaries(ts, vals, boundaries)):
+        if i:
+            xs.append(np.array([(xs[-1][-1] + t[0]) / 2.0]))
+            ys.append(np.array([np.nan]))
+        xs.append(t.astype(float))
+        ys.append(v)
+    if not xs:
+        return pd.to_datetime(np.array([], dtype=np.int64), unit="s"), np.array([])
+    return pd.to_datetime(np.concatenate(xs).astype(np.int64), unit="s"), np.concatenate(ys)
+
 
 def _pearson_r2(x: np.ndarray, y: np.ndarray) -> float:
     mask = ~(np.isnan(x) | np.isnan(y))
