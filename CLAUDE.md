@@ -63,6 +63,7 @@ src/lensky_py_lab/
 │   ├── cleaner.py        # filter_extreme_values, filter_outliers_sliding_window
 │   ├── smoother.py       # add_lowess (statsmodels LOWESS)
 │   ├── eligibility.py    # EligibilityRules, evaluate_eligibility — which satellites take part
+│   ├── observation_counts.py  # observations_per_month — Table S1 (kept dates per sensor per month)
 │   └── processor.py      # process_source — runs the full pipeline
 ├── clients/
 │   ├── ims_client.py     # IMSClient — IMS Envista REST API (api_key auth)

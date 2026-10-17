@@ -91,7 +91,9 @@ from lensky_py_lab.phenology.phenolopy_integration import (
     extract_phenology,
 )
 from lensky_py_lab.io.gee_extract import parse_sources
-from lensky_py_lab.pipeline.eligibility import evaluate_eligibility
+from lensky_py_lab.pipeline.eligibility import evaluate_eligibility, reference_window
+from lensky_py_lab.pipeline.observation_counts import observations_per_month
+from lensky_py_lab.pipeline.processor import merge_processed
 from lensky_py_lab.plotting.plotter import plot_cleaning_pipeline, plot_site, plot_data_availability
 from lensky_py_lab.sensors.nsrs_calibration import (
     apply_nsrs3_factor,
@@ -253,7 +255,7 @@ def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = 
 
         backup_name = f"{source_name}_B"
         if backup_name in all_processed:
-            merged_df = _merge_processed_for_plot(
+            merged_df = merge_processed(
                 ds.processed, all_processed[backup_name].processed
             )
             fig_clean = plot_cleaning_pipeline(source_name, merged_df)
@@ -276,6 +278,13 @@ def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = 
     elig.to_csv(out_dir / "source_eligibility.csv", index=False)
     print(elig.to_string(index=False))
     excluded = elig.loc[~elig["in_analysis"], "source"].tolist()
+
+    # Table S1: kept observations per sensor per month, all sources (incl. excluded)
+    obs_table = observations_per_month(
+        all_processed, reference_window(nsrs_sources), excluded=excluded)
+    obs_table.to_csv(out_dir / "observations_per_month.csv", index=False)
+    n_months = int(obs_table["month"].str.fullmatch(r"\d{4}-\d{2}").sum())
+    print(f"  → observations_per_month.csv ({n_months} months × {obs_table.shape[1] - 1} sources)")
     if excluded:
         print(f"  Left out of the analysis (kept in the availability chart): {excluded}")
     all_sat_sources = dict(sat_sources)
@@ -578,20 +587,6 @@ def _run_calibration(calib_result: dict, nsrs3_raw: pd.Series, site_df: pd.DataF
     print(f"  → calibration_statistics.csv")
 
     return calib_result
-
-
-def _merge_processed_for_plot(
-    primary_df: pd.DataFrame,
-    backup_df: pd.DataFrame,
-) -> pd.DataFrame:
-    """Merge two processed DataFrames for a unified cleaning-pipeline figure.
-
-    Primary timestamps are kept as-is; backup contributes only at timestamps
-    not already present in primary. The result is sorted by index so the plotter
-    sees a single time series with a natural gap between the two deployment periods.
-    """
-    extra = backup_df.index.difference(primary_df.index)
-    return pd.concat([primary_df, backup_df.loc[extra]]).sort_index()
 
 
 def _run_daily_graphs(data_dir: Path, out_daily: Path, dat_dir: Optional[Path] = None) -> None:

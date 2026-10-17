@@ -148,6 +148,8 @@ table = evaluate_eligibility(satellite_sources, nsrs_sources, EligibilityRules()
 
 `scripts/run_rh_ndvi.py` applies the rules by default (`--eligibility enforce`), writes
 `source_eligibility.csv` (measures, verdict, reasons), and leaves failing sources out of the analysis.
+
+It also writes `observations_per_month.csv` (supplementary Table S1): per sensor and calendar month of the NSRS window, the number of distinct dates with a kept observation (after extreme and outlier filters; `NSRS_x` and `NSRS_x_B` count as one sensor), plus a `Total` row and one row per complete Dec–Mar season. Excluded sources keep their column, labelled `(excluded)`.
 `--eligibility report` only writes the table; `--exclude L8` leaves a source out regardless of the rules.
 Left-out sources are still processed, still get their data-cleaning figure, and **stay in the
 data-availability chart**, labelled "(excluded)".

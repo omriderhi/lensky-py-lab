@@ -124,7 +124,11 @@ value and 51 days at window >= 11. L8 (excluded) moves up to 0.20 / 36 days (no 
 - `final/RH_NDVI_data_availability.png`: shows L8 as "(excluded)".
 - `comparative/` (MODIS, S2), `decomposition/` (MODIS, S2), `data_cleaning/RH_NDVI/<source>.png` (all sources, L8 included), `calibration/`, `orientation/`.
 
+- `observations_per_month.csv` (in the results folder, not a figure): **Table S1**, kept dates per sensor per month of the NSRS window (reviewer [29]); RH totals MODIS 496, S2 64, L8 38 (L8 excluded).
+
 ## 7. Manuscript statements to update
+
+- **Table S1:** comes from `observations_per_month.csv`; cite it from sections 2.4.1 and 3.3.
 
 - **Data / Methods, satellite data:** MODIS = `MODIS/006/MOD09GQ`, NDVI from b02 and b01, mask NDVI >= 0.35, no pixel-level cloud mask;
   S2 = `COPERNICUS/S2_SR_HARMONIZED`, scene cloud filter < 10 %, mask >= 0.35, 2019-01-01 to 2021-11-16 (107 images); L8 = C02 T1_L2 with
