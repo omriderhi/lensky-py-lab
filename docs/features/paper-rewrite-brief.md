@@ -30,10 +30,10 @@ A satellite takes part only if both hold over the NSRS observation window (2019-
 | Source | valid dates in window | month coverage | verdict |
 |---|---|---|---|
 | MODIS | 523 | 1.00 | in |
-| S2 | 45 | 0.65 | in, narrowly |
+| S2 | 64 | 0.89 | in |
 | L8 | 32 | 0.58 | out (fails both) |
 
-Be candid in the text: the thresholds are judgment calls fixed after the RH data had been seen, and S2 passes / L8 fails by small margins. Do not present them as standard thresholds from the literature (no citation exists for them). Reviewers may ask; the honest answer is in `pipeline/eligibility.py` and the README.
+Be candid in the text: the thresholds are judgment calls fixed after the RH data had been seen, and L8 fails by small margins (S2 passes comfortably since its series was extended to Nov 2021, see `s2-extension.md`). Do not present them as standard thresholds from the literature (no citation exists for them). Reviewers may ask; the honest answer is in `pipeline/eligibility.py` and the README.
 
 ## 4. Why these decisions (short evidence)
 
@@ -41,11 +41,11 @@ Be candid in the text: the thresholds are judgment calls fixed after the RH data
 - The current filter is harmless for MODIS (4.7 % removed; peaks identical to "no outlier filter" within 0.004).
 - On sparse series it removes real peaks: L8's three highest values and, with the 0.02 floor, S2 values in the high-NDVI season. The S2 floor of 0.08 fixes S2 (PoS values match the no-filter series).
 - L8: the research CSV lists 22 dates twice. Earth Engine (`LANDSAT/LC08/C02/T1_L2`) shows the point lies in the overlap of rows 37 and 38 of path 174; both scenes come from one overpass seconds apart. After averaging, L8 has 51 valid dates (not 73 rows), and no filter setting tried protects its peaks while an observation window is used. Its Table 4 correlations ranged from 0.17 to 0.98 across window / k settings, on 10-17 paired dates. That is why it is excluded rather than tuned.
-- The original `LANDSAT/LC08/C01/T1_SR` collection used by the research JS no longer exists in Earth Engine, so the L8 series cannot be regenerated or compared value by value (S2 `COPERNICUS/S2_SR` still works but is deprecated).
+- The original `LANDSAT/LC08/C01/T1_SR` collection used by the research JS no longer exists in Earth Engine, so the L8 series cannot be regenerated or compared value by value (S2 `COPERNICUS/S2_SR` still works but is deprecated, and no longer matches the harmonised collection; the S2 series was therefore regenerated as one product, see `s2-extension.md`).
 
 ## 5. Numbers as of this PR (regenerate before quoting)
 
-Run: `python scripts/run_rh_ndvi.py --data-dir data/research_results/RH_NDVI --ims-dir data/research_results/IMS --out-dir data/results_<name>` (outputs are gitignored; this snapshot is from `data/results_eligibility_2026-10-17`). NSRS_3 factor derived from the data: 1.384 (RMSE 0.159 -> 0.0405, R2 0.899, n = 470); the manuscript's 1.36 predates the cleaning fix and the 1.4 is only a comparison value.
+Run: `python scripts/run_rh_ndvi.py --data-dir data/research_results/RH_NDVI --ims-dir data/research_results/IMS --out-dir data/results_<name>` (outputs are gitignored; this snapshot is from the single-product S2 run, `data/results/s2_single_product_run`; the MODIS and NSRS rows are unchanged from `data/results_eligibility_2026-10-17`). NSRS_3 factor derived from the data: 1.384 (RMSE 0.159 -> 0.0405, R2 0.899, n = 470); the manuscript's 1.36 predates the cleaning fix and the 1.4 is only a comparison value.
 
 Table 4 (Full signal vs NSRS_3, Woody vs NSRS_2, Herbaceous vs NSRS_1):
 
@@ -54,11 +54,11 @@ Table 4 (Full signal vs NSRS_3, Woody vs NSRS_2, Herbaceous vs NSRS_1):
 | MODIS | Full signal | 371 | 0.042 | 0.052 | 0.974 | -0.018 |
 | MODIS | Woody | 357 | 0.123 | 0.140 | 0.045 | -0.120 |
 | MODIS | Herbaceous | 342 | 0.449 | 0.459 | 0.863 | -0.449 |
-| S2 | Full signal | 27 | 0.058 | 0.064 | 0.938 | 0.048 |
-| S2 | Woody | 27 | 0.139 | 0.159 | -0.648 | -0.139 |
-| S2 | Herbaceous | 25 | 0.363 | 0.370 | 0.950 | -0.363 |
+| S2 | Full signal | 46 | 0.039 | 0.048 | 0.956 | 0.027 |
+| S2 | Woody | 46 | 0.138 | 0.156 | -0.219 | -0.138 |
+| S2 | Herbaceous | 44 | 0.385 | 0.390 | 0.917 | -0.385 |
 
-The woody and herbaceous rows compare a satellite-derived component with a differently defined NSRS layer (bias is about minus the MAE; see the header of `phenology/decomposition_validation.py`). Do not read them as accuracy of the decomposition. The S2 rows rest on 25-27 dates, so differences of about 0.01 are not meaningful.
+The woody and herbaceous rows compare a satellite-derived component with a differently defined NSRS layer (bias is about minus the MAE; see the header of `phenology/decomposition_validation.py`). Do not read them as accuracy of the decomposition. The S2 rows rest on 44-46 dates (S2 series extended to Nov 2021 and regenerated as one product), so differences of about 0.01 are not meaningful.
 
 Phenology (hydrological year Y = Sep Y-1 to Aug Y), MODIS and S2 (the CSV dates carry a 21:00/22:00 time of day from time-zone conversion, so a date here may be one day off from the local calendar date; recheck before quoting exact days):
 
@@ -69,9 +69,9 @@ Phenology (hydrological year Y = Sep Y-1 to Aug Y), MODIS and S2 (the CSV dates 
 | MODIS | 2020 | 2019-10-30 | 2020-03-01 | 2020-07-01 | 0.634 | |
 | MODIS | 2021 | 2020-11-05 | 2021-02-20 | 2021-06-01 | 0.655 | |
 | MODIS | 2022 | 2021-11-08 | 2022-02-06 | 2022-07-26 | 0.601 | |
-| S2 | 2019 | 2018-12-31 | 2018-12-31 | 2019-05-03 | 0.743 | **record starts 2018-12-31: SoS and PoS are edge artefacts, do not interpret** |
-| S2 | 2020 | 2019-11-04 | 2020-03-02 | 2020-05-31 | 0.705 | |
-| S2 | 2021 | 2020-11-15 | 2021-02-05 | not reached | 0.800 | EoS censored (record ends before the curve falls below threshold) |
+| S2 | 2019 | 2018-12-31 | 2018-12-31 | 2019-05-09 | 0.744 | **record starts 2018-12-31: SoS and PoS are edge artefacts, do not interpret** |
+| S2 | 2020 | 2019-11-30 | 2020-03-04 | 2020-05-29 | 0.702 | SoS moved 25 days between S2 product versions (2019-11-05 before): treat S2 SoS as imprecise |
+| S2 | 2021 | 2020-10-30 | 2021-02-10 | 2021-05-06 | 0.810 | EoS now found because the S2 record runs to 2021-11-16 (it was censored when S2 ended 2021-04-30) |
 
 `extract_phenology` reports EoS only if the curve falls below the threshold before the record ends; otherwise `EoS_censored` is True and EoS is blank. Do not fill it with the last day of data.
 
