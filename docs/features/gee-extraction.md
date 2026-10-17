@@ -42,11 +42,18 @@ The research JS used `MODIS/006`, `COPERNICUS/S2_SR` and `LANDSAT/LC08/C01/T1_SR
 - **L8 cannot be reproduced**: `LANDSAT/LC08/C01/T1_SR` no longer exists. The client's C02 series (with the QA mask the
   script lacked) differs on all 49 dates shared with the existing file (bias -0.03, max 0.058, RMSE 0.034).
 
-## L8 with the NSRS-aligned window: eligibility changes
+## L8 with the NSRS-aligned window: applied (2026-10-17)
 
-With the 2019-01-01 .. 2021-12-05 window L8 has 70 dates (97 images, adjacent-row overlaps are averaged on load) and, tested
-on a scratch copy of the data, the eligibility rules give **42 valid dates in the NSRS window and month coverage 0.77, so L8
-becomes eligible** (before: 32 and 0.58, excluded). It would then take part in phenology, decomposition and the comparative
-figures. This contradicts the L8 exclusion in `paper-rewrite-brief.md` and `satellite-data-cleaning-audit-report.md`, which
-were based on the old C01-derived export; the L8 filter question (floor 0.10, window) also has to be re-audited on the new
-series before L8 is used. Not verified.
+`L8.csv` was re-extracted with the 2019-01-01 .. 2021-12-05 window: 70 dates (97 images; adjacent-row overlaps are averaged
+on load). `gee_extraction_log.json` holds the comparison with the replaced file. Effect on the analysis:
+
+- **Eligibility flips:** 42 valid dates in the NSRS window and month coverage 0.77 (before 32 and 0.58), so L8 now takes part
+  in phenology, decomposition and the comparative figures. This contradicts the L8 exclusion in `paper-rewrite-brief.md`
+  and `satellite-data-cleaning-audit-report.md`, which rest on the old C01-derived export.
+- **But the L8 curve misses the winter peaks.** Few scenes pass the < 10 % cloud filter in winter, so the smoothed L8 curve
+  stays between about 0.40 and 0.50 while NSRS reaches 0.73-0.81. Phenology: PoS 2020 = 0.609 on 2020-04-12 (NSRS peaks in
+  Feb-Mar); PoS 2021 = 0.503 on 2020-11-26, which is not the seasonal peak. Table 4, L8 (n = 24-26): full signal MAE 0.023,
+  r 0.87; woody r -0.32; herbaceous r 0.40. The eligibility rules count dates and months, not whether the peak season is
+  sampled, so they do not catch this.
+- **Decision still open:** exclude L8 (`--exclude L8`), add a seasonal-coverage rule, or keep it. The L8 filter (floor 0.10,
+  window 7) has not been re-audited on the new series. Not verified.

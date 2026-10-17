@@ -1,0 +1,58 @@
+{
+  "L8": {
+    "code_commit": "39c9ce6",
+    "collection": "client default (see gee_client._COLLECTIONS)",
+    "comparison_with_previous_file": {
+      "bias_new_minus_old": -0.0305,
+      "max_abs_diff": 0.0577,
+      "new_dates_with_value": 70,
+      "only_in_new": 21,
+      "only_in_previous": 2,
+      "previous_dates_with_value": 51,
+      "previous_file": true,
+      "rmse": 0.0337,
+      "shared_dates": 49,
+      "shared_dates_identical": 0
+    },
+    "extracted_utc": "2026-10-17T13:08:38Z",
+    "file": "L8.csv",
+    "gee_source": "L8",
+    "point_lon_lat": [
+      34.946667,
+      32.555806
+    ],
+    "rows": 97,
+    "window": [
+      "2019-01-01",
+      "2021-12-05"
+    ]
+  },
+  "S2": {
+    "code_commit": "39c9ce6",
+    "collection": "client default (see gee_client._COLLECTIONS)",
+    "comparison_with_previous_file": {
+      "bias_new_minus_old": 0.0,
+      "max_abs_diff": 0.0005,
+      "new_dates_with_value": 107,
+      "only_in_new": 0,
+      "only_in_previous": 0,
+      "previous_dates_with_value": 107,
+      "previous_file": true,
+      "rmse": 0.0003,
+      "shared_dates": 107,
+      "shared_dates_identical": 107
+    },
+    "extracted_utc": "2026-10-17T13:08:37Z",
+    "file": "S2.csv",
+    "gee_source": "S2",
+    "point_lon_lat": [
+      34.946667,
+      32.555806
+    ],
+    "rows": 107,
+    "window": [
+      "2019-01-01",
+      "2021-12-05"
+    ]
+  }
+}
