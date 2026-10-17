@@ -62,7 +62,38 @@ Non-S2 outputs and the NSRS_3 calibration are unchanged. Full numbers: `paper-re
 - The S2 start of season is the least stable marker: it moved 25 days (2019-11-05 to 2019-11-30) when
   the product version and the record length changed. Do not quote S2 SoS to the day.
 - The S2 2019 season starts at 2018-12-31/2019-01-01 (SoS and PoS are edge artefacts).
-- The floor of 0.08 was chosen on the old S2 series. Its audit (PoS matches the no-filter series) was
-  **not** repeated on the regenerated series.
+- The floor of 0.08 was chosen on the old S2 series; it was re-audited on the regenerated series (below). Say
+  that with this floor the S2 outlier filter removes 1 of 91 observations, i.e. S2 is effectively unfiltered
+  apart from the extreme-value limit and LOWESS. Do not describe S2 as having been "cleaned of outliers".
 - MODIS and L8 were not re-checked against the JS (the JS uses scale 10 for all sources, `MODIS/006`
   and `LANDSAT/LC08/C01`; the client uses `MODIS/061` and Landsat C02).
+
+## Outlier floor re-audit on the single-product series
+
+`python scripts/audit/s2_floor_reaudit.py` (outputs in `data/results/s2_floor_reaudit/`, gitignored).
+S2 has 91 valid observations after the extreme-value filter (min 0.4). Window 7, k 3:
+
+| Floor | Removed (below / above local median) | PoS value 2019 / 2020 / 2021 | RMSE vs NSRS mean (n = 46 overlap) |
+|---|---|---|---|
+| none | 0 | 0.744 / 0.704 / 0.810 | 0.059 |
+| 0.02 (default) | 14 (4 / 10) | 0.711 / 0.685 / 0.812 | 0.059 (n = 40) |
+| 0.04 | 10 | 0.711 / 0.685 / 0.812 | 0.061 |
+| 0.06 | 3 | 0.744 / 0.702 / 0.810 | 0.059 |
+| **0.08 (used)** | **1** | **0.744 / 0.702 / 0.810** | 0.059 |
+| 0.10 / 0.12 / 0.15 | 1 | identical to 0.08 | 0.059 |
+
+- The default floor 0.02 removes real high-season values (2018-12-31 0.744, 2020-01-10 0.712, 2020-03-15 0.713),
+  moves the 2020 PoS date from day 64 to day 36 and the 2019 PoS from an edge artefact (day 365) to day 40.
+  The original finding is confirmed on the new series.
+- Floors 0.08 to 0.15 give identical results; 0.06 is within 0.002 of them on peak values. The choice of 0.08
+  inside that range is not tuned to one value.
+- At 0.08 the only point removed is 2019-07-14 (0.646 against a local median of 0.472, an isolated summer
+  spike). It lies before the NSRS record (starts 2019-10-06), so NSRS cannot validate the removal; agreement
+  with NSRS is the same with and without the filter. The point was not inspected in the imagery.
+- Window matters more than floor: window 11 or 15 with floor <= 0.08 removes 7-11 observations and cuts the
+  2020 PoS value to 0.561; they need floor 0.15 to recover (0.684). Window 5 behaves like 7.
+  The result is therefore conditional on window = 7 observations (about 5 weeks for S2).
+- SoS and EoS dates are stable across floors >= 0.06 (SoS 2020 day 334, EoS 2020 day 150). The 2020 SoS is the
+  same with no filter (day 334), so its 25-day move versus the old series comes from the data version, not
+  the filter.
+- Not verified: other window / k combinations beyond window 5-15 and k = 3 (k was not varied here).
