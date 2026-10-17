@@ -12,6 +12,7 @@ Date: 2025
 
 from __future__ import annotations
 
+import logging
 import sys
 from pathlib import Path
 from typing import Dict, Optional
@@ -19,6 +20,8 @@ from typing import Dict, Optional
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Attempt to load shared plot_config from repo root
@@ -64,11 +67,52 @@ _DATE_VAL = [
 ]
 
 
+MIN_SEASON_DAYS = 60
+"""Default shortest SoS→EoS span accepted as a real season when drawing markers."""
+
+MIN_PEAK_TO_END_DAYS = 14
+"""Default shortest PoS→EoS span; shorter means the record ends at the peak."""
+
+_reported: set = set()
+
+
+def _is_complete_season(
+    row: pd.Series,
+    min_season_days: int = MIN_SEASON_DAYS,
+    min_peak_to_end_days: int = MIN_PEAK_TO_END_DAYS,
+) -> bool:
+    """Return False for degenerate seasons (truncated record at a series edge).
+
+    A hydrological year that is only partly covered by data (e.g. the record
+    starts in January or ends in autumn) yields SoS == PoS, or events piled up
+    within days. Those rows are kept in the CSV but are not drawn.
+
+    The events that are present (SoS, PoS, EoS, in that order) must be strictly
+    increasing, which also covers partial rows with a missing date. When all
+    three exist, SoS→EoS must be at least ``min_season_days`` and PoS→EoS at
+    least ``min_peak_to_end_days``.
+    """
+    try:
+        dates = [pd.to_datetime(row.get(c)) for c in ("SoS_date", "PoS_date", "EoS_date")]
+    except (TypeError, ValueError):
+        return True
+    present = [d for d in dates if not pd.isna(d)]
+    if any(b <= a for a, b in zip(present, present[1:])):
+        return False
+    if len(present) < 3:
+        return True
+    sos, pos, eos = present
+    return (eos - sos).days >= min_season_days and (eos - pos).days >= min_peak_to_end_days
+
+
 def draw_phenology_markers(
     ax: plt.Axes,
     phenology_df: pd.DataFrame,
     source: Optional[str] = None,
     year: Optional[int] = None,
+    skip_degenerate: bool = True,
+    min_season_days: int = MIN_SEASON_DAYS,
+    min_peak_to_end_days: int = MIN_PEAK_TO_END_DAYS,
 ) -> None:
     """Scatter SoS / PoS / EoS points at ``(event_date, event_value)``.
 
@@ -88,6 +132,12 @@ def draw_phenology_markers(
         Filter to a single satellite/source name (matches the ``satellite`` column).
     year : int, optional
         Filter to a single hydrological year.
+    skip_degenerate : bool
+        Skip seasons truncated by the record edges (see :func:`_is_complete_season`).
+        Skipped rows are logged once each and remain in ``phenology_df`` / the CSV.
+        Pass ``False`` to draw every row.
+    min_season_days, min_peak_to_end_days : int
+        Thresholds for the degenerate-season test.
 
     Notes
     -----
@@ -106,6 +156,17 @@ def draw_phenology_markers(
     drawn_types: set = set()
 
     for _, row in df.iterrows():
+        if skip_degenerate and not _is_complete_season(
+            row, min_season_days, min_peak_to_end_days
+        ):
+            key = (row.get("satellite"), row.get("year"))
+            if key not in _reported:
+                _reported.add(key)
+                logger.warning(
+                    "Phenology markers not drawn for %s %s: truncated/degenerate season "
+                    "(still present in the CSV).", *key,
+                )
+            continue
         for marker, col_date, col_val in _DATE_VAL:
             date_raw = row.get(col_date)
             val = row.get(col_val)

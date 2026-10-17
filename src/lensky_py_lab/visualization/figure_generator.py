@@ -428,7 +428,9 @@ def plot_decomposition_comparative(
         add_panel_letter(ax, letter)
         _format_date_axis(ax)
 
-    _equalize_y_span(axes[1:])
+    # Reviewer [37]: all panels on the same y-scale (equal span / tick spacing),
+    # so full-signal, woody and herbaceous magnitudes are directly comparable.
+    _equalize_y_span(axes)
 
     fig.suptitle(
         f"{site_name} — {satellite_name} woody/herbaceous decomposition vs NSRS",
@@ -453,7 +455,12 @@ def _equalize_y_span(axes) -> None:
 
     Tick spacing is then directly comparable between panels even when the
     panels have different offsets (e.g. woody NDVI vs herbaceous ΔNDVI).
+    Panels with no plotted data are ignored: their default (0, 1) limits would
+    otherwise set the span for every other panel.
     """
+    axes = [ax for ax in axes if ax.has_data()]
+    if not axes:
+        return
     limits = [ax.get_ylim() for ax in axes]
     span = max(hi - lo for lo, hi in limits)
     for ax, (lo, hi) in zip(axes, limits):

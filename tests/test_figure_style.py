@@ -76,5 +76,22 @@ def test_decomposition_panel_letters_and_equal_spans():
     assert {"A", "B", "C"} <= set(letters)
     lo2, hi2 = fig.axes[1].get_ylim()
     lo3, hi3 = fig.axes[2].get_ylim()
+    lo1, hi1 = fig.axes[0].get_ylim()
     assert np.isclose(hi2 - lo2, hi3 - lo3)
+    assert np.isclose(hi1 - lo1, hi2 - lo2)   # panel A shares the span too
+    plt.close(fig)
+
+
+def test_equalize_y_span_ignores_empty_panels():
+    from lensky_py_lab.visualization.figure_generator import _equalize_y_span
+
+    fig, axes = plt.subplots(3, 1)
+    axes[0].plot([0, 1], [0.0, 0.1])
+    axes[1].plot([0, 1], [0.5, 0.7])
+    # axes[2] has no data: default (0, 1) limits must not set the span
+    _equalize_y_span(axes)
+    lo, hi = axes[0].get_ylim()
+    assert np.isclose(hi - lo, axes[1].get_ylim()[1] - axes[1].get_ylim()[0])
+    assert (hi - lo) < 0.5
+    assert axes[2].get_ylim() == (0.0, 1.0)
     plt.close(fig)
