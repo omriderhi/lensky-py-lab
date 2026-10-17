@@ -52,15 +52,15 @@ DAT_DIR = Path(args.dat_dir) if args.dat_dir else None
 
 # ── per-source configs (verbatim from notebook) ───────────────────────────────
 CONFIGS = {
-    "MODIS":    {"min": False, "max": 0.8,  "average_window": 0.1125, "images_per_month": 30},
-    "S2":       {"min": 0.4,  "max": False, "average_window": 0.1005, "images_per_month": 5},
-    "L8":       {"min": 0.4,  "max": False, "average_window": 0.1005, "images_per_month": 4},
-    "NSRS_1":   {"min": 0.2,  "max": False, "average_window": 0.05,   "images_per_month": 30},
-    "NSRS_2":   {"min": 0.2,  "max": False, "average_window": 0.05,   "images_per_month": 30},
-    "NSRS_3":   {"min": 0.2,  "max": False, "average_window": 0.05,   "images_per_month": 30},
-    "NSRS_1_B": {"min": 0.2,  "max": False, "average_window": 0.05,   "images_per_month": 30},
-    "NSRS_2_B": {"min": 0.2,  "max": False, "average_window": 0.05,   "images_per_month": 30},
-    "NSRS_3_B": {"min": 0.2,  "max": False, "average_window": 0.05,   "images_per_month": 30},
+    "MODIS":    {"min": False, "max": 0.8,  "outlier_window": 7, "images_per_month": 30},
+    "S2":       {"min": 0.4,  "max": False, "outlier_window": 7, "images_per_month": 5},
+    "L8":       {"min": 0.4,  "max": False, "outlier_window": 7, "images_per_month": 4},
+    "NSRS_1":   {"min": 0.2,  "max": False, "outlier_window": 7,   "images_per_month": 30},
+    "NSRS_2":   {"min": 0.2,  "max": False, "outlier_window": 7,   "images_per_month": 30},
+    "NSRS_3":   {"min": 0.2,  "max": False, "outlier_window": 7,   "images_per_month": 30},
+    "NSRS_1_B": {"min": 0.2,  "max": False, "outlier_window": 7,   "images_per_month": 30},
+    "NSRS_2_B": {"min": 0.2,  "max": False, "outlier_window": 7,   "images_per_month": 30},
+    "NSRS_3_B": {"min": 0.2,  "max": False, "outlier_window": 7,   "images_per_month": 30},
 }
 
 # ── load & process (skips missing files gracefully) ───────────────────────────

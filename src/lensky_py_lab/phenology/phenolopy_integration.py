@@ -90,7 +90,10 @@ def extract_phenology(
     -------
     pd.DataFrame
         Columns: ``[site, satellite, year, SoS_date, PoS_date, EoS_date,
-        PoS_value, SoS_doy, PoS_doy, EoS_doy]``
+        SoS_value, PoS_value, EoS_value, SoS_doy, PoS_doy, EoS_doy, EoS_censored]``.
+        ``EoS_censored`` is True when the record ends before the curve falls below
+        the threshold; ``EoS_date`` / ``EoS_value`` / ``EoS_doy`` are then NaT / NaN
+        ("end of season not reached") rather than the last day of data.
 
     Notes
     -----
@@ -131,7 +134,7 @@ def extract_phenology(
         "site", "satellite", "year",
         "SoS_date", "PoS_date", "EoS_date",
         "SoS_value", "PoS_value", "EoS_value",
-        "SoS_doy", "PoS_doy", "EoS_doy",
+        "SoS_doy", "PoS_doy", "EoS_doy", "EoS_censored",
     ]
     if rows:
         out = pd.DataFrame(rows)[_OUTPUT_COLS]
@@ -355,6 +358,9 @@ def _extract_markers(series: pd.Series, factor: float = 0.2) -> Optional[Dict]:
     eos_rel_idx = int(eos_candidates[-1]) if len(eos_candidates) > 0 else len(right_side) - 1
     eos_idx = pos_idx + eos_rel_idx
     eos_ts = float(ts_daily[eos_idx])
+    # The curve is still above the threshold on the last day of data: the record
+    # ends before senescence does, so no EoS can be reported (right-censored).
+    eos_censored = eos_idx >= n - 2
 
     def _ts_to_date(ts: float) -> pd.Timestamp:
         return pd.Timestamp(int(ts), unit="s")
@@ -369,6 +375,20 @@ def _extract_markers(series: pd.Series, factor: float = 0.2) -> Optional[Dict]:
     pos_value = _value_at(pos_ts)
     eos_value = _value_at(eos_ts)
 
+    if eos_censored:
+        return {
+            "SoS_date":  _ts_to_date(sos_ts),
+            "PoS_date":  _ts_to_date(pos_ts),
+            "EoS_date":  pd.NaT,
+            "SoS_value": sos_value,
+            "PoS_value": pos_value,
+            "EoS_value": np.nan,
+            "SoS_doy":   _ts_to_doy(sos_ts),
+            "PoS_doy":   _ts_to_doy(pos_ts),
+            "EoS_doy":   np.nan,
+            "EoS_censored": True,
+        }
+
     return {
         "SoS_date":  _ts_to_date(sos_ts),
         "PoS_date":  _ts_to_date(pos_ts),
@@ -379,6 +399,7 @@ def _extract_markers(series: pd.Series, factor: float = 0.2) -> Optional[Dict]:
         "SoS_doy":   _ts_to_doy(sos_ts),
         "PoS_doy":   _ts_to_doy(pos_ts),
         "EoS_doy":   _ts_to_doy(eos_ts),
+        "EoS_censored": False,
     }
 
 

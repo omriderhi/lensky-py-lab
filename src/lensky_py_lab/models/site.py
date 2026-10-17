@@ -33,7 +33,7 @@ class Site:
         )
         modis = DataSource.from_csv(
             "MODIS", "data/RH/MODIS.csv",
-            SourceConfig(max_value=0.8, average_window=0.1125, images_per_month=30),
+            SourceConfig(max_value=0.8, outlier_window=7, images_per_month=30),
         )
         site = Site("RH_NDVI", nsrs_sources={"NSRS_1": nsrs1},
                     satellite_sources={"MODIS": modis})
@@ -50,7 +50,7 @@ class Site:
         )
         modis = DataSource.from_dataframe(
             "MODIS", gee_df,
-            SourceConfig(max_value=0.8, average_window=0.1125, images_per_month=30),
+            SourceConfig(max_value=0.8, outlier_window=7, images_per_month=30),
         )
         site = Site("RH_NDVI", nsrs_sources={"NSRS_1": nsrs1},
                     satellite_sources={"MODIS": modis})

@@ -114,16 +114,16 @@ from lensky_py_lab.visualization.orientation_map import (
 
 NOTEBOOK_CONFIGS: dict = {
     # Satellite sources
-    "MODIS":    {"min": False,  "max": 0.8,   "average_window": 0.1125, "images_per_month": 30},
-    "S2":       {"min": 0.4,    "max": False,  "average_window": 0.1005, "images_per_month": 5},
-    "L8":       {"min": 0.4,    "max": False,  "average_window": 0.1005, "images_per_month": 4},
+    "MODIS":    {"min": False,  "max": 0.8,   "outlier_window": 7, "images_per_month": 30},
+    "S2":       {"min": 0.4,    "max": False,  "outlier_window": 7, "images_per_month": 5},
+    "L8":       {"min": 0.4,    "max": False,  "outlier_window": 7, "images_per_month": 4},
     # Ground sensors
-    "NSRS_1":   {"min": 0.2,    "max": False,  "average_window": 0.05,   "images_per_month": 30},
-    "NSRS_2":   {"min": 0.2,    "max": False,  "average_window": 0.05,   "images_per_month": 30},
-    "NSRS_3":   {"min": 0.2,    "max": False,  "average_window": 0.05,   "images_per_month": 30},   # NSRS_3 factor is derived from the data (calibrate_nsrs3_sources)
-    "NSRS_1_B": {"min": 0.2,    "max": False,  "average_window": 0.05,   "images_per_month": 30},
-    "NSRS_2_B": {"min": 0.2,    "max": False,  "average_window": 0.05,   "images_per_month": 30},
-    "NSRS_3_B": {"min": 0.2,    "max": False,  "average_window": 0.05,   "images_per_month": 30},
+    "NSRS_1":   {"min": 0.2,    "max": False,  "outlier_window": 7,   "images_per_month": 30},
+    "NSRS_2":   {"min": 0.2,    "max": False,  "outlier_window": 7,   "images_per_month": 30},
+    "NSRS_3":   {"min": 0.2,    "max": False,  "outlier_window": 7,   "images_per_month": 30},   # NSRS_3 factor is derived from the data (calibrate_nsrs3_sources)
+    "NSRS_1_B": {"min": 0.2,    "max": False,  "outlier_window": 7,   "images_per_month": 30},
+    "NSRS_2_B": {"min": 0.2,    "max": False,  "outlier_window": 7,   "images_per_month": 30},
+    "NSRS_3_B": {"min": 0.2,    "max": False,  "outlier_window": 7,   "images_per_month": 30},
 }
 
 # Which sources are ground sensors (NSRS) vs satellite
@@ -171,7 +171,7 @@ def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = 
 
         config = SourceConfig.from_notebook_dict(nb_cfg)
         ds = DataSource.from_csv(source_name, csv_path, config)
-        ds.process()   # runs filter_extreme_values → filter_by_average_groups → LOWESS
+        ds.process()   # runs filter_extreme_values → filter_outliers_sliding_window → LOWESS
 
         n_clean  = ds.processed[NDVI_CLEAN_FIELD].count()
         n_lowess = ds.processed[NDVI_LOWESS_FIELD].count() if NDVI_LOWESS_FIELD in ds.processed else 0

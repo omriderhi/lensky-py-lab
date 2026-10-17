@@ -68,7 +68,7 @@ from lensky_py_lab import Site, DataSource, SourceConfig, SatelliteSource
 config = SourceConfig(
     min_value=0.0,
     max_value=1.0,
-    average_window=0.05,
+    outlier_window=7,
     images_per_month=2,
     general_factor=None,
 )
@@ -91,7 +91,7 @@ site_df = site.run_analysis()
 
 ```python
 modis_config = SourceConfig(min_value=0.0, max_value=1.0,
-                             average_window=0.05, images_per_month=2)
+                             outlier_window=7, images_per_month=2)
 modis = DataSource.from_csv("MODIS", "data/raw/RH/MODIS.csv", modis_config)
 site.add_satellite(modis)
 ```

@@ -11,7 +11,7 @@
 | `7025f5c` | list `fov_canopy_fraction.py` in CLAUDE.md |
 | `5f92b75` | calibration panel A: plot observations with gap breaks, no resampling |
 
-**Tests:** `python -m pytest -q` → 78 passed.
+**Tests:** `python -m pytest -q` → 88 passed.
 **Reviewer ask:** check that each change does what its *Intent* says, that nothing changes a published number without being listed under *Numeric impact*, and that the *Not changed (deliberately)* items were left alone.
 
 ---
@@ -105,6 +105,31 @@ The console line used to print the RMSE at the optimal factor as "after". It now
 
 ---
 
+### 9. Outlier filter replaced by a real sliding-window rule; censored EoS
+**Files:** `pipeline/cleaner.py`, `pipeline/processor.py`, `configs.py`, `constants.py`, `phenology/phenolopy_integration.py`, scripts, README/CLAUDE.md, `tests/test_outlier_filter.py`
+
+**Intent:** make the code do what manuscript Section 2.4.1 says ("outlier detection using a sliding-window approach"). The old `filter_by_average_groups` compared each value with the **global** mean and kept only values at least `average_window` away from it, so it deleted ordinary data, left a bimodal series, trimmed series ends (NSRS_3 LOWESS stopped on 15 Apr 2020 although data runs to 24 Apr) and made SoS/EoS depend on the threshold (NSRS_1 2021 EoS moved by 3.5 months between 0.03 and 0.05). Raising the threshold or window cannot fix it (the group size was never used; a bigger threshold deletes more).
+
+- New `filter_outliers_sliding_window`: remove a point if it deviates from the median of its centred `outlier_window` observations by more than `max(outlier_k × 1.4826 × MAD, outlier_min_threshold)` (window 7, k 3, floor 0.02, MAD window 31).
+- `SourceConfig`: `average_window` removed, replaced by `outlier_window`, `outlier_k`, `outlier_min_threshold`, `outlier_scale_window`. `from_notebook_dict` raises on `average_window`. The legacy rule is gone.
+- Satellites use the same filter with the same untuned settings; see `satellite-data-cleaning-audit.md`. Their numbers are provisional.
+- `extract_phenology` adds `EoS_censored`: when the curve is still above the threshold on the last day of data, `EoS_date` / `EoS_value` / `EoS_doy` are NaT / NaN instead of the last day of data (NSRS 2020 EoS values of 24 Apr were record ends).
+
+**Numeric impact** (`data/research_results/RH_NDVI`, derived factor, vs previous commit):
+
+| | before | after |
+|---|---|---|
+| NSRS_3 derived factor | 1.364 | 1.384 |
+| raw RMSE / optimal RMSE / RMSE at ×1.4 | 0.149 / 0.030 / 0.033 | 0.159 / 0.0405 / 0.0409 |
+| R² / n co-observations | 0.957 / 296 | 0.899 / 470 |
+| NSRS_1 2021 EoS | 4 Apr | 19 Jul |
+| NSRS_3 2021 EoS | 2 Jun | 30 Jun |
+| NSRS 2020 EoS | 10–24 Apr | not reached (censored) |
+| NSRS peak values | | within 0.01 |
+| MODIS peak values | 0.65–0.71 | 0.60–0.65 |
+
+**Check:** NSRS LOWESS reaches the last observation; `EoS_censored` rows draw only SoS/PoS markers.
+
 ## Not part of the diff
 
 - Regenerated outputs go to a `data/results_*/` directory (ignored). `data/results_regen_2026-10-15/` was produced in a different environment (timestamps up to 3 h off, values up to 4e-4 off) and is **not** a valid baseline for the current code.
@@ -119,13 +144,13 @@ The console line used to print the RMSE at the optimal factor as "after". It now
 4. **Marker/line colour clash.** NSRS_1's line and the PoS marker are both `#D55E00`, and markers carry no sensor identity.
 5. **In-figure titles** with internal names (`RH_NDVI — NSRS vs MODIS`).
 6. **Phenology method naming.** The manuscript names Phenolopy, but the code is a native Savitzky–Golay + 20 % seasonal-amplitude implementation. Only the manuscript text needs to change.
-7. **Manuscript edits.** The comparison against the regenerated outputs is done (`manuscript-comparison.md`); the manuscript itself has not been edited. Decision taken: the manuscript is aligned to the derived factor (1.36), so Tables 3/4 and Section 3.2 need the updated NSRS_3 numbers listed there.
+7. **Manuscript edits.** The comparison against the regenerated outputs is done (`manuscript-comparison.md`); the manuscript itself has not been edited. Decision taken: the manuscript is aligned to the derived factor. After change 9 the derived factor is 1.384, not 1.36, so the comparison numbers in `manuscript-comparison.md` that were stated at 1.364 are superseded; see its second section.
 
 ## How to reproduce
 
 ```bash
 # from repo root, Python >=3.10 with the package installed (pip install -e .) and pytest
-python -m pytest -q                                  # 78 passed
+python -m pytest -q                                  # 88 passed
 
 # default: factor derived from the data
 PYTHONPATH=src:. MPLBACKEND=Agg python scripts/run_rh_ndvi.py \

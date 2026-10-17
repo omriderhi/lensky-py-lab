@@ -59,7 +59,7 @@ src/lensky_py_lab/
 │   ├── site.py           # Site — main analysis object
 │   └── source.py         # DataSource — one satellite or NSRS sensor
 ├── pipeline/
-│   ├── cleaner.py        # filter_extreme_values, filter_by_average_groups
+│   ├── cleaner.py        # filter_extreme_values, filter_outliers_sliding_window
 │   ├── smoother.py       # add_lowess (statsmodels LOWESS)
 │   └── processor.py      # process_source — runs the full pipeline
 ├── clients/
@@ -90,7 +90,7 @@ Scripts in `scripts/`:
 ## Data flow
 
 1. **Load** — `DataSource.from_csv()` or `DataSource.from_dataframe()` (GEE output)
-2. **Process** — `DataSource.process()` runs: extreme filter → average-group filter → LOWESS
+2. **Process** — `DataSource.process()` runs: extreme filter → sliding-window outlier filter → LOWESS
 3. **Assemble** — `Site(nsrs_sources={…}, satellite_sources={…}, ims_data=df)`
 4. **Analyse** — `site.run_analysis()` → joins all LOWESS columns into a single timestamp-indexed DataFrame
 5. **Phenology** — `extract_phenology(site_df)` → SoS / PoS / EoS per satellite per year
@@ -104,6 +104,12 @@ Scripts in `scripts/`:
 - `SourceConfig` uses `None` for "no threshold / skip this step" (the notebook used `False` — `SourceConfig.from_notebook_dict()` converts that).
 - GEE support is an optional extra (`pip install lensky-py-lab[gee]`); `earthengine-api` is not imported at module load time.
 - Hydrological year Y = Sep (Y-1) through Aug Y, matching Mediterranean growing season.
+
+## Outlier filter
+
+`filter_outliers_sliding_window()` (pipeline/cleaner.py): a point is removed when it deviates from the median of its centred `outlier_window` observations (default 7 in the scripts) by more than `max(outlier_k × 1.4826 × MAD, outlier_min_threshold)` (k = 3, floor 0.02 NDVI; MAD over a 31-observation window). The earlier `average_window` rule (a mean-deviation test against the global mean that kept outliers and dropped ordinary values) was removed; `SourceConfig.from_notebook_dict` raises if it sees `average_window`. The satellite sources use the same filter with the same settings, but those settings have not been audited — see `docs/features/satellite-data-cleaning-audit.md`.
+
+`extract_phenology()` reports an end of season only if the curve falls below the threshold before the record ends; otherwise `EoS_censored` is True and `EoS_date` / `EoS_value` / `EoS_doy` are NaT / NaN.
 
 ## Phenological markers
 
@@ -120,7 +126,7 @@ Markers are rendered as colored scatter points (▲ SoS, ● PoS, ▼ EoS) on co
 NSRS_3 has a wide-angle lens that captured sky reflectance due to sensor pole tilt.  
 Correction: `corrected_NDVI = raw_NDVI × factor`, where the factor is **derived from the data** — the RMSE-minimising multiplier against the mean of NSRS_1 and NSRS_2 (`calibrate_nsrs3_sources()` in `sensors/nsrs_calibration.py`). It is applied to the NSRS_3 / NSRS_3_B LOWESS columns and registered via `get_active_factor()`. The earlier hardcoded value 1.4 (**not** 0.4) survives only as `NSRS3_PUBLISHED_FACTOR`, for comparison; it is never applied. The manuscript (v12) reports the optimum, 1.36, which the derived 1.364 reproduces.
 
-Validation (n=296 co-observations): derived factor = 1.364 (manuscript: 1.36; earlier code: 1.4). RMSE improves from 0.149 → 0.030 at the derived factor (0.033 at ×1.4). Using 1.364 instead of 1.4 scales NSRS_3 by ~0.974 versus the earlier outputs.
+Validation (n=470 co-observations, sliding-window cleaning): derived factor = 1.384 (earlier code: 1.4; the manuscript's 1.36 predates the cleaning fix). RMSE improves from 0.159 → 0.0405 at the derived factor (0.0409 at ×1.4); R² = 0.899.
 
 Calibration is **optional**: nothing in the package requires it. `run_rh_ndvi.py --nsrs3-factor auto|none|<number>` (default `auto`) derives it, skips it, or applies a fixed value; the validation figure/CSV (step 9) only runs in `auto` mode. Applying twice raises, and each run clears any previous factor. Do not hardcode a factor anywhere; RMSE is computed by the single `metrics.rmse()`. `get_logger_ndvi` (daily graphs) only calibrates sensor 3 if a factor is registered in the same process. `run_rh_ndvi.py` registers it before its daily-graph step; the standalone `run_daily_graphs.py` takes the same `--nsrs3-factor auto|none|<number>` (auto needs `--data-dir`/`RH_DATA_DIR` with the NSRS CSVs) and otherwise leaves sensor 3 uncalibrated.
 

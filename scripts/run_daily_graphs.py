@@ -35,7 +35,7 @@ from lensky_py_lab.sensors.nsrs_calibration import (
 )
 
 # Same NSRS cleaning settings as run_rh_ndvi.py (verbatim from the notebook).
-_NSRS_CONFIG = {"min": 0.2, "max": False, "average_window": 0.05, "images_per_month": 30}
+_NSRS_CONFIG = {"min": 0.2, "max": False, "outlier_window": 7, "images_per_month": 30}
 _NSRS_NAMES = ("NSRS_1", "NSRS_2", "NSRS_3", "NSRS_1_B", "NSRS_2_B", "NSRS_3_B")
 
 # ── configure paths ───────────────────────────────────────────────────────────
