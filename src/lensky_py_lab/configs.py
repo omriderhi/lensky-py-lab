@@ -19,6 +19,13 @@ class SourceConfig:
         outlier_min_threshold: Floor of the removal threshold, in NDVI units.
         outlier_scale_window: Observations in the window over which the MAD of the
             residuals is taken.
+        outlier_window_days: Half-width, in days, of a centred *calendar* window for
+            ``filter_outliers_time_window`` (e.g. 15). Takes precedence over
+            ``outlier_window`` when set. Suited to sparse satellite series, where
+            N observations span very different time intervals per source.
+        outlier_direction: ``"both"`` removes points above or below the window
+            median; ``"down"`` removes only low outliers (cloud/atmosphere only push
+            NDVI down). Applies to the time-window filter only.
         images_per_month: LOWESS smoothing bandwidth expressed as the typical number
             of observations per month (frac = images_per_month / N_non_null_points).
             None = skip smoothing.
@@ -39,6 +46,8 @@ class SourceConfig:
     outlier_k: float = 3.0
     outlier_min_threshold: float = 0.02
     outlier_scale_window: int = 31
+    outlier_window_days: Optional[int] = None
+    outlier_direction: str = "both"
     images_per_month: Optional[int] = None
     general_factor: Optional[float] = None
     wide_gap_days: Optional[int] = 60
@@ -68,6 +77,8 @@ class SourceConfig:
             outlier_k=float(d.get("outlier_k", 3.0)),
             outlier_min_threshold=float(d.get("outlier_min_threshold", 0.02)),
             outlier_scale_window=int(d.get("outlier_scale_window", 31)),
+            outlier_window_days=_parse_int(d.get("outlier_window_days"), None),
+            outlier_direction=str(d.get("outlier_direction", "both")),
             images_per_month=int(d["images_per_month"]) if d.get("images_per_month") else None,
             general_factor=_parse(d.get("general_factor")),
             wide_gap_days=_parse_int(d.get("wide_gap_days"), 60),
