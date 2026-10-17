@@ -8,7 +8,7 @@ Detail and evidence: `docs/features/satellite-data-cleaning-audit-report.md`. **
 
 1. **Outlier filter, NSRS and MODIS: unchanged.** Observation window 7, removal threshold `max(3 x 1.4826 x MAD, 0.02)`, MAD over 31 observations. It is a median/MAD test, applied after the extreme-value filter and before LOWESS.
 2. **Outlier filter, S2: same filter with a raised floor of 0.08 NDVI** (instead of 0.02). Reason: 0.02 was tuned for daily ground sensors; on a sparse series 7 observations span about 5 weeks and the filter removed real high-season values.
-3. **L8 is excluded from the analysis** (no phenology, no Table 3 / Table 4 rows, no comparative or decomposition figures) **by decision, not by the rules**: after L8 was re-extracted (Collection 2, window aligned to the NSRS record) it passes the data-sufficiency rules (42 dates, coverage 0.77), but its winter coverage is too thin to show the peak season (section 3 note, `satellite-data-products.md` section 4). L8 **stays in the data-availability figure**, labelled "(excluded)". Its data-cleaning figure is still produced.
+3. **L8 is excluded from the analysis** (no phenology, no Table 3 / Table 4 rows, no comparative or decomposition figures) **by rule 3 of the eligibility rules (peak-season sampling, section 3)**: after L8 was re-extracted (Collection 2, window aligned to the NSRS record) it passes the date and month rules (42 dates, coverage 0.77), but has only 2 and 3 valid dates in Dec-Mar of the two winters in the NSRS window (S2: 8 and 11; MODIS: 59 and 79), so its curve does not reach the seasonal peak (`satellite-data-products.md` section 4). Rule 3 and its threshold were added after those counts were seen (judgment call, say so). L8 **stays in the data-availability figure**, labelled "(excluded)". Its data-cleaning figure is still produced.
 4. **L8 same-date rows are averaged** (one overpass appears as two adjacent-row scenes: 97 images, 70 dates in the current C02 extraction). This is a data fix and matters only if L8 is shown (availability / cleaning figure).
 5. **After the research is handed over, the repo's satellite default should become the downward-only, calendar-window filter** (`outlier_window_days=15, outlier_direction="down"`, implemented, tested, unused by the research config). It is **not** what the paper's results used. Do not describe it as the method of the paper.
 
@@ -17,23 +17,24 @@ Detail and evidence: `docs/features/satellite-data-cleaning-audit-report.md`. **
 - NSRS and MODIS: values outside [min, max] are discarded (NSRS >= 0.2; MODIS <= 0.8); each observation is removed if it differs from the median of its 7 neighbouring observations by more than max(3 x 1.4826 x MAD, 0.02) with MAD over a 31-observation window; the series is then smoothed with LOWESS.
 - S2: values below 0.4 are discarded; the same test with a floor of 0.08. Say that the floor was chosen from a sensitivity analysis on this site's data.
 - State that the window counts **observations**, not days (about one week for daily MODIS, about five weeks for S2).
-- If the paper mentions L8, say it was acquired from Landsat-8 Collection 2 (70 dates, 42 in the NSRS window), that it passes the sufficiency rules, and that it was excluded because the < 10 % cloud filter leaves almost no winter scenes, so its curve does not reach the seasonal peak (do not write that it failed the rules).
+- If the paper mentions L8, say it was acquired from Landsat-8 Collection 2 (70 dates, 42 in the NSRS window) and excluded because the < 10 % cloud filter leaves 2-3 valid dates per winter, so its curve does not reach the seasonal peak (rule 3, section 3).
 - Do **not** claim that "cloud-contaminated values were removed" without qualification. MODIS gets no pixel-level cloud mask in the Earth Engine script (only the NDVI >= 0.35 mask), so MODIS cloud dips are handled only by the filter above and by LOWESS. S2 and L8 only have a scene-level cloud filter (< 10 %).
 - Do not cite the downward-only approach as the paper's method (decision 5). If it appears at all, it belongs in a "future work / released package" sentence.
 
 ## 3. Eligibility rules (state them in Methods, with the numbers)
 
-A satellite takes part only if both hold over the NSRS observation window (2019-10-06 to 2021-11-03), judged after the extreme-value filter and before the outlier filter (so the verdict does not depend on filter settings or on any result):
+A satellite takes part only if all three hold over the NSRS observation window (2019-10-06 to 2021-11-03), judged after the extreme-value filter and before the outlier filter (so the verdict does not depend on filter settings or on any result):
 - at least **40** distinct valid observation dates in the window;
-- valid data in at least **60 %** of the calendar months in the window.
+- valid data in at least **60 %** of the calendar months in the window;
+- at least **5** distinct valid dates in each peak season (1 Dec - 31 Mar) that lies wholly inside the window (2019/20 and 2020/21 here).
 
-| Source | valid dates in window | month coverage | verdict |
-|---|---|---|---|
-| MODIS | 523 | 1.00 | in |
-| S2 | 64 | 0.89 | in |
-| L8 | 42 | 0.77 | passes; **excluded by decision** (see note below) |
+| Source | valid dates in window | month coverage | min dates in a Dec-Mar winter | verdict |
+|---|---|---|---|---|
+| MODIS | 523 | 1.00 | 59 | in |
+| S2 | 64 | 0.89 | 8 | in |
+| L8 | 42 | 0.77 | 2 | out (fails rule 3) |
 
-Be candid in the text: the thresholds are judgment calls fixed after the RH data had been seen. S2 passes comfortably since its series was extended to Nov 2021 (`s2-extension.md`). L8 passes too with the re-extracted series but is excluded because the rules count dates and months, not whether the peak season is sampled; say so, and do not claim the exclusion follows from the rules. Do not present them as standard thresholds from the literature (no citation exists for them). Reviewers may ask; the honest answer is in `pipeline/eligibility.py` and the README.
+Be candid in the text: the thresholds are judgment calls fixed after the RH data had been seen, and rule 3 was added after the winter counts were seen (it sits between S2's 8 and L8's 2-3 and is close to neither). S2 passes comfortably since its series was extended to Nov 2021 (`s2-extension.md`). L8 passes rules 1-2 with the re-extracted series and is excluded by rule 3 only. Do not present the thresholds as standard thresholds from the literature (no citation exists for them). Reviewers may ask; the honest answer is in `pipeline/eligibility.py` and the README.
 
 ## 4. Why these decisions (short evidence)
 
@@ -89,6 +90,6 @@ Phenology (hydrological year Y = Sep Y-1 to Aug Y), MODIS and S2 (the CSV dates 
 
 - The S2 floor (0.08) and the eligibility thresholds are tuned to this one site's data.
 - Records start mid-season (MODIS Jan 2018, S2 2018-12-31), so the first hydrological year's SoS (and for S2, PoS) is partly an edge effect.
-- Sensitivity: MODIS results are stable across window 5-15 and k 2.5-4; S2 and L8 are not, which is part of why an observation-count filter is a weak design for sparse series.
+- Sensitivity (current series, window 5-15 x k 2.5-4, `scripts/audit/satellite_k_window_reaudit.py`): MODIS peak values stay within 0.011, timing markers within 4 days for window >= 11 or k = 4 but up to 55 days (310 in one case) for aggressive settings (window 5 at k <= 3, window 7 at k 2.5); S2 does not depend on k (the 0.08 floor dominates) but loses up to 0.141 in peak value and 51 days at window >= 11; L8 moves up to 0.20 / 36 days with the filter choice. An observation-count filter is a weak design for sparse series.
 - The literature for "clouds lower NDVI, so low values are the suspect ones" (Holben 1986; Viovy et al. 1992 BISE; Chen et al. 2004; TIMESAT) was read only at abstract or secondary level. Read the full texts before citing; the specific median/MAD rule used here is this project's design, not a published method.
 - The `.docx` manuscript, Fig S4-S6 and the original GEE script outputs could not be compared directly.

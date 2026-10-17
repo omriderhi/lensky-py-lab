@@ -57,3 +57,5 @@ The 1.364 numbers above were computed with the old filter, which deleted ordinar
 - **Section 3.1 EoS ranges and Table 4:** NSRS_3 and the satellite series changed, so the MODIS, S2 (and new L8) full-signal MAE / RMSE / bias, the woody and herbaceous rows, and Section 3.2 quotes must be recomputed. The satellite series use the same filter with untuned settings (MODIS peaks fall by 0.03 to 0.11, S2 2019 EoS moves 79 days), so **do not copy satellite numbers until `satellite-data-cleaning-audit.md` is done**.
 - **Section 2.4.1:** the sliding-window sentence is now true as written. Add the settings: centred 7-observation running median, threshold 3 × 1.4826 × MAD (31-observation window) with a 0.02 NDVI floor.
 - **Figs S1–S3:** regenerate; the clean panel is now continuous and the LOWESS curve reaches the last observation.
+
+Superseded for the satellite parts by `manuscript-comparison-v13.md` (v13 against the current outputs).

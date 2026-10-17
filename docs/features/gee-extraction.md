@@ -49,15 +49,18 @@ The research JS used `MODIS/006`, `COPERNICUS/S2_SR` and `LANDSAT/LC08/C01/T1_SR
 `L8.csv` was re-extracted with the 2019-01-01 .. 2021-12-05 window: 70 dates (97 images; adjacent-row overlaps are averaged
 on load). `gee_extraction_log.json` holds the comparison with the replaced file. Effect on the analysis:
 
-- **Eligibility flips:** 42 valid dates in the NSRS window and month coverage 0.77 (before 32 and 0.58), so L8 now takes part
-  in phenology, decomposition and the comparative figures. This contradicts the L8 exclusion in `paper-rewrite-brief.md`
-  and `satellite-data-cleaning-audit-report.md`, which rest on the old C01-derived export.
+- **Rules 1-2 (dates, months) now pass:** 42 valid dates in the NSRS window and month coverage 0.77 (before 32 and 0.58).
 - **But the L8 curve misses the winter peaks.** Few scenes pass the < 10 % cloud filter in winter, so the smoothed L8 curve
-  stays between about 0.40 and 0.50 while NSRS reaches 0.73-0.81. Phenology: PoS 2020 = 0.609 on 2020-04-12 (NSRS peaks in
-  Feb-Mar); PoS 2021 = 0.503 on 2020-11-26, which is not the seasonal peak. Table 4, L8 (n = 24-26): full signal MAE 0.023,
-  r 0.87; woody r -0.32; herbaceous r 0.40. The eligibility rules count dates and months, not whether the peak season is
-  sampled, so they do not catch this.
-- **Decision (2026-10-17): L8 is excluded.** `MANUAL_EXCLUSIONS` in `scripts/run_rh_ndvi.py` (the default of `--exclude`; pass
-  `--exclude` with no names to apply only the rules). It stays in the data-availability figure ("(excluded)") and in its data-cleaning
-  figure. Not done: a seasonal-coverage rule; the L8 filter (floor 0.10, window 7) has not been re-audited on the new series.
+  stays between about 0.40 and 0.50 while NSRS reaches 0.73-0.81. Phenology if L8 were included: PoS 2020 = 0.609 on 2020-04-12
+  (NSRS peaks in Feb-Mar); PoS 2021 = 0.503 on 2020-11-26, which is not the seasonal peak. Table 4, L8 (n = 24-26): full signal
+  MAE 0.023, r 0.87; woody r -0.32; herbaceous r 0.40. Rules 1-2 count dates and months, not whether the peak season is sampled.
+- **Rule 3 (peak-season sampling) added to the eligibility rules:** at least 5 valid dates in each 1 Dec - 31 Mar that lies wholly
+  inside the NSRS window. Dates per winter (2019/20, 2020/21): MODIS 59 / 79, S2 8 / 11, L8 2 / 3. L8 fails it, so **L8 is excluded
+  by rule**, not by hand (`pipeline/eligibility.py`; it stays in the data-availability figure, labelled "(excluded)", and in its
+  data-cleaning figure). The threshold lies between S2 and L8 and close to neither, but it was chosen after the counts were seen:
+  state that in the Methods. The largest gap inside Dec-Mar tells the same story (MODIS 9 days, S2 35 / 30, L8 80 / 48).
+- **L8 filter re-audit on the new series** (`scripts/audit/satellite_k_window_reaudit.py`): L8 phenology depends on the filter
+  choice, up to 0.20 in peak value and 36 days between the configured setting (window 7, k 3, floor 0.10), no filter and window 5;
+  floor 0.02 shifts markers by up to 351 days (a season flips) and floor 0.05 by 0.054 / 22 days; floor 0.15, k 2.5 / 4 and the
+  configured setting are identical; windows 11-15 move the peak by 0.054. This instability is consistent with excluding L8.
   Everything for the paper: `satellite-data-products.md`.

@@ -163,6 +163,13 @@ Full run: `python scripts/run_rh_ndvi.py --data-dir data/research_results/RH_NDV
 The L8 and S2 sections above were written on the earlier CSV export. Since then: S2 was regenerated as one product
 (`COPERNICUS/S2_SR_HARMONIZED`) and extended to 2021-11-16, the 0.08 floor was re-audited on it and holds (it removes 1 of 91
 observations, so S2 is effectively unfiltered); L8 was re-extracted from Collection 2 with a QA mask (the C01 collection no
-longer exists), which makes it pass the eligibility rules (42 dates, coverage 0.77), and it is now excluded by decision because
-its winter coverage does not reach the seasonal peak. Numbers quoted above for S2 (45 dates, 0.65) and L8 (51 dates, floors,
+longer exists), which makes it pass the date and month rules (42 dates, coverage 0.77); a peak-season rule was added (>= 5 valid dates in each
+Dec-Mar inside the NSRS window; MODIS 59 / 79, S2 8 / 11, L8 2 / 3) and L8 now fails it, so it stays excluded. Numbers quoted above for S2 (45 dates, 0.65) and L8 (51 dates, floors,
 32 / 0.58) describe the old export. See `s2-extension.md`, `gee-extraction.md` and `satellite-data-products.md`.
+
+Re-audit of window and k on the current series (`scripts/audit/satellite_k_window_reaudit.py`, window 5/7/11/15 x k 2.5/3/4 at each source's floor;
+reference = window 7, k 3): MODIS peak values stay within 0.011 across the grid, timing within 4 days for window >= 11 or k = 4 and up to 55 days
+(310 in one case) for window 5 at k <= 3 and window 7 at k 2.5. S2 is independent of k at floor 0.08 and loses up to 0.141 in peak value at window >= 11.
+L8 (re-extracted, excluded) moves up to 0.20 in peak value and 36 days with the filter choice (no filter, window 5), floor 0.02 shifts a season by up to
+351 days, floor 0.05 by 0.054 / 22 days, floor 0.15 and k 2.5 / 4 equal the configured setting. The earlier statement that MODIS is "stable across window
+5-15 and k 2.5-4" holds for peak values, not for timing at the aggressive settings.

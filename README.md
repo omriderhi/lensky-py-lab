@@ -133,11 +133,13 @@ filter settings or on any result:
 |---|---|
 | `min_valid_dates` — distinct valid observation dates in the window | 40 |
 | `min_month_coverage` — fraction of months in the window with at least one valid observation | 0.60 |
+| `min_peak_season_dates` — distinct valid dates in each complete peak season (1 Dec – 31 Mar) inside the window | 5 |
 
 All rules must hold. The thresholds are judgment calls set after the RH data had been seen: S2 passes
-(64 dates, 0.89 coverage); L8 passes with the re-extracted Collection-2 series (42 dates, 0.77) but is excluded by decision, because its
-winter coverage is too thin to show the seasonal peak (`MANUAL_EXCLUSIONS` in `run_rh_ndvi.py`). Report the rules in the Methods, and
-change them only with a reason.
+(64 dates, 0.89 coverage, 8 and 11 dates in the two winters); L8 (re-extracted Collection 2) passes the first two rules (42 dates, 0.77)
+but fails the peak-season rule (2 and 3 dates in the two winters, against MODIS 59 and 79): the < 10 % cloud filter leaves almost no winter
+scenes, so its curve misses the seasonal peak. The peak-season rule and its threshold were added after those counts were seen. Report the
+rules in the Methods, and change them only with a reason.
 
 ```python
 from lensky_py_lab.pipeline.eligibility import EligibilityRules, evaluate_eligibility
@@ -146,7 +148,7 @@ table = evaluate_eligibility(satellite_sources, nsrs_sources, EligibilityRules()
 
 `scripts/run_rh_ndvi.py` applies the rules by default (`--eligibility enforce`), writes
 `source_eligibility.csv` (measures, verdict, reasons), and leaves failing sources out of the analysis.
-`--eligibility report` only writes the table; `--exclude` leaves the named sources out regardless of the rules (default: `L8`, see `MANUAL_EXCLUSIONS`; `--exclude` with no names applies only the rules).
+`--eligibility report` only writes the table; `--exclude L8` leaves a source out regardless of the rules.
 Left-out sources are still processed, still get their data-cleaning figure, and **stay in the
 data-availability chart**, labelled "(excluded)".
 

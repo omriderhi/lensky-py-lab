@@ -15,7 +15,7 @@ The files are `data/research_results/RH_NDVI/*.csv`; `gee_extraction_log.json` n
 | NSRS_1, NSRS_2, NSRS_3 (+ `_B` replacements) | Ground NDVI sensors (Campbell loggers) | not from GEE | 2019-10-06 .. 2021-11-03 | none at extraction; cleaning: values >= 0.2, outlier filter window 7 / floor 0.02, LOWESS | 202 / 202 / 202 (+ 389 / 390 / 390 `_B`) raw dates | reference |
 | MODIS | Daily 250 m surface-reflectance NDVI, mean over the RH point | `MODIS/006/MOD09GQ` (Collection 6), `(b02-b01)/(b02+b01)` | 2018-01-01 .. 2022-09-01 | NDVI >= 0.35; no pixel-level cloud mask | 1,113 dates with a value | in the analysis |
 | S2 | Sentinel-2 L2A 10 m NDVI, mean at the RH point | `COPERNICUS/S2_SR_HARMONIZED`, `(B8-B4)/(B8+B4)` | 2019-01-01 .. 2021-12-05 (last image 2021-11-16) | `CLOUD_COVERAGE_ASSESSMENT < 10` (scene level), NDVI >= 0.35 | 107 images | in the analysis |
-| L8 | Landsat-8 30 m NDVI, mean at the RH point | `LANDSAT/LC08/C02/T1_L2` (scale 0.0000275, offset -0.2), `QA_PIXEL` cloud and shadow mask | 2019-01-01 .. 2021-12-05 | `CLOUD_COVER < 10`, NDVI >= 0.35 | 97 images, 70 dates (one overpass appears as two adjacent-row scenes; averaged on load) | **excluded by decision** (section 4) |
+| L8 | Landsat-8 30 m NDVI, mean at the RH point | `LANDSAT/LC08/C02/T1_L2` (scale 0.0000275, offset -0.2), `QA_PIXEL` cloud and shadow mask | 2019-01-01 .. 2021-12-05 | `CLOUD_COVER < 10`, NDVI >= 0.35 | 97 images, 70 dates (one overpass appears as two adjacent-row scenes; averaged on load) | **excluded by rule 3** (section 4) |
 | IMS rainfall, temperature | Station data | not from GEE | as before | none | unchanged | context in figures |
 | VENuS, PLANET | listed in the README | no client support, no RH file | | | | not part of this analysis |
 
@@ -42,22 +42,26 @@ scale (MODIS 250 m, S2 10 m, L8 30 m). For MODIS, scale 10 m and 250 m give iden
 | Product | Change | Evidence | Consequence for the text |
 |---|---|---|---|
 | MODIS | none (file untouched) | the research script's collection `MODIS/006` still reproduces the file: 1,112 of 1,112 shared dates identical (max difference 0.0005). `MODIS/061` does not: 504 of 1,111 identical, RMSE 0.021, max 0.435 before filtering | name the collection as **MODIS/006 (Collection 6)**; do not describe the data as Collection 6.1. 006 is deprecated and may leave Earth Engine; the exported CSV is the archive |
-| S2 | whole series regenerated as one product and extended from 2021-04-30 to 2021-11-16 | the old export mixes processing baselines: 47 of 79 comparable dates differ from today's archive by up to 0.10 (RMSE 0.029), all on baseline 05.00; the original collection `COPERNICUS/S2_SR` is deprecated, returns 74 instead of 135 images and carries a +1000 offset on baseline 05.00 scenes | name the collection as **S2_SR_HARMONIZED**; every S2 number changes slightly (full set of numbers in section 5) |
+| S2 | whole series regenerated as one product and extended from 2021-04-30 to 2021-11-16 | the old export mixes processing baselines: 47 of 79 comparable dates differ from today's archive by up to 0.10 (RMSE 0.029), all on baseline 05.00, and every one of them was generated 757-1,506 days after sensing (Nov 2022 - 2023), i.e. reprocessed, whereas every matching baseline 02.xx scene was generated the day it was sensed; the original collection `COPERNICUS/S2_SR` is deprecated, returns 74 instead of 135 images and carries a +1000 offset on baseline 05.00 scenes | name the collection as **S2_SR_HARMONIZED**; every S2 number changes slightly (full set of numbers in section 5) |
 | L8 | replaced by a Collection-2 extraction with a QA mask, window aligned to the NSRS record | the original `LANDSAT/LC08/C01/T1_SR` no longer exists; the new series differs from the old on all 49 shared dates (bias -0.03, max 0.058, RMSE 0.034) | L8 cannot be reproduced from the research script; state C02 and that it is excluded |
 | NSRS, IMS | none | | |
 
 ## 4. L8: why it is excluded
 
-With the new extraction L8 has 42 valid dates and month coverage 0.77 in the NSRS window, so it **passes** the data-sufficiency
-rules (>= 40 dates, >= 60 % of months). It is nevertheless left out of phenology, Table 3 / Table 4 and the comparative and
-decomposition figures (`MANUAL_EXCLUSIONS` in `scripts/run_rh_ndvi.py`; it stays in the data-availability figure, labelled
-"(excluded)", and its data-cleaning figure is still produced). Reason: the < 10 % scene cloud filter leaves very few winter scenes,
-so the smoothed L8 curve stays between about 0.40 and 0.50 while NSRS reaches 0.73-0.81, and its "peak of season" markers are not
-seasonal peaks (2020: 0.609 on 2020-04-12; 2021: 0.503 on 2020-11-26). With the decomposition computed anyway, L8 Table 4 has n = 24-26 and
-a herbaceous correlation of 0.40, i.e. it does not support a comparison. The rules count dates and months, not whether the
-peak season is sampled; this is the gap that makes the exclusion a decision and not a rule outcome. Say so in the text; do not
-write that L8 "failed the rules" (it did on the old export, it does not on the current one). Not done: a seasonal-coverage rule,
-and a re-audit of the L8 filter (floor 0.10, window 7) on the new series.
+With the new extraction L8 has 42 valid dates and month coverage 0.77 in the NSRS window, so it passes the first two eligibility
+rules (>= 40 dates, >= 60 % of months). It fails the third, **peak-season sampling**: at least 5 valid dates in each 1 Dec - 31 Mar
+that lies wholly inside the NSRS window. Dates per winter (2019/20, 2020/21): MODIS 59 / 79, S2 8 / 11, L8 2 / 3 (largest gap inside
+Dec-Mar: MODIS 9 days, S2 35 / 30, L8 80 / 48). L8 is therefore left out of phenology, Table 3 / Table 4 and the comparative and
+decomposition figures (it stays in the data-availability figure, labelled "(excluded)", and its data-cleaning figure is still produced).
+
+Why the rule exists: the < 10 % scene cloud filter leaves very few winter scenes, so the smoothed L8 curve stays between about 0.40 and
+0.50 while NSRS reaches 0.73-0.81, and its "peak of season" markers are not seasonal peaks (2020: 0.609 on 2020-04-12; 2021: 0.503 on
+2020-11-26). If L8 were included, Table 4 would have n = 24-26 and a herbaceous correlation of 0.40. Its markers also depend on the
+filter choice (up to 0.20 in peak value and 36 days between the configured setting, no filter and window 5; see section 5 sensitivity).
+
+State in the Methods that rule 3 and its threshold were set after the counts were seen; the threshold sits between S2 and L8 and is close
+to neither, but it is a judgment call like the other two. Do not write that L8 "failed the date or month rules" (it did on the old export;
+it does not on the current one).
 
 ## 5. Numbers from the current run
 
@@ -72,11 +76,11 @@ NSRS_3 correction factor, derived from the data: 1.384 (n = 470 co-observations;
 
 Eligibility (NSRS window 2019-10-06 to 2021-11-03):
 
-| Source | valid dates | month coverage | rules | in the analysis |
-|---|---|---|---|---|
-| MODIS | 523 | 1.00 | pass | yes |
-| S2 | 64 | 0.89 | pass | yes |
-| L8 | 42 | 0.77 | pass | no (decision, section 4) |
+| Source | valid dates | month coverage | min dates in a Dec-Mar winter | rules | in the analysis |
+|---|---|---|---|---|---|
+| MODIS | 523 | 1.00 | 59 | pass | yes |
+| S2 | 64 | 0.89 | 8 | pass | yes |
+| L8 | 42 | 0.77 | 2 | fails rule 3 | no |
 
 Table 4 (Full signal vs NSRS_3, Woody vs NSRS_2, Herbaceous vs NSRS_1):
 
@@ -106,6 +110,13 @@ be one day off the local calendar date):
 | S2 | 2020 | 2019-11-30 | 2020-03-04 | 2020-05-29 | 0.702 | SoS moved 25 days between S2 product versions: imprecise |
 | S2 | 2021 | 2020-10-30 | 2021-02-10 | 2021-05-06 | 0.810 | EoS found because S2 now runs to 2021-11-16 (it was censored when S2 ended 2021-04-30) |
 
+Sensitivity of the satellite outlier filter on the current series (`scripts/audit/satellite_k_window_reaudit.py`, window 5-15 x k 2.5-4 at
+each source's configured floor; reference = window 7, k 3): MODIS peak values stay within 0.011; timing markers stay within 4 days for
+window >= 11 or k = 4, and move up to 55 days (310 in one case; not examined which marker) for aggressive settings (window 5 at k <= 3,
+window 7 at k 2.5). S2 does not depend on k (the 0.08 floor dominates; 1 point removed at windows 5 and 7) but loses up to 0.141 in peak
+value and 51 days at window >= 11. L8 (excluded) moves up to 0.20 / 36 days (no filter, window 5), 0.054 / 22 days at floor 0.05, and
+351 days at floor 0.02; floor 0.15 and k 2.5 / 4 equal the configured setting.
+
 ## 6. Figures produced (all under `data/results/figures/`)
 
 - `final/RH_NDVI_S2_vs_NSRS_timeseries.png`: **new**, S2 + NSRS + IMS rainfall and temperature + phenology markers (same design as the MODIS one).
@@ -120,7 +131,7 @@ be one day off the local calendar date):
   QA_PIXEL mask, acquired and excluded (section 4). All three: mean at the RH point at native scale, accessed 2026-10-17 through Earth Engine.
 - **Data availability:** the CSVs and `gee_extraction_log.json` are in the repository; the extraction code is `scripts/pull_gee_data.py`.
   Note that `MODIS/006` and the original `COPERNICUS/S2_SR` are deprecated assets and may disappear from Earth Engine.
-- **Eligibility paragraph:** thresholds and the three verdicts (section 5); L8 passes the rules and is excluded for lack of winter coverage.
+- **Eligibility paragraph:** the three rules, thresholds and the three verdicts (section 5); L8 is excluded by the peak-season rule (rule 3) for lack of winter coverage.
 - **Table 3 / Table 4 satellite rows, Sections 3.1-3.2:** MODIS and S2 per section 5; S2 values changed (and S2 SoS is imprecise).
 - **Fig S4-S6 and the availability-figure caption:** regenerate from the current run; the S2 publication figure is new.
 - **Limitations:** S2 is effectively unfiltered at floor 0.08 and its result depends on window = 7 observations; MODIS 006 is deprecated;
@@ -128,7 +139,8 @@ be one day off the local calendar date):
 
 ## 8. Not verified
 
-- Manuscript tables and figures were not regenerated or compared against the `.docx`.
-- The cause of the S2 differences from the old export (ESA reprocessing after the export) is inferred, not confirmed.
-- The MODIS filter, S2 floor and L8 filter were not audited against other k values than 3 on the new series.
+- Figures were not diffed against the manuscript (text and tables were: `manuscript-comparison-v13.md`); the `.docx` was not edited.
+- The 310-day shift of a MODIS marker at window 5 / k 2.5 was not traced to a specific season or marker.
+- The pairing behind the manuscript's per-sensor agreement numbers (Section 3.1) is undocumented.
+- Rule 3's threshold (5 dates) is a judgment call made after seeing the RH counts; other sites or periods may need another value.
 - MODIS was not re-extracted with the new tool (the existing file is the research export; re-extraction would swap 6 dates in and 1 out).

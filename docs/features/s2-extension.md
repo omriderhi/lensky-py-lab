@@ -12,7 +12,9 @@ processing versions and was replaced.
 1. The old export mixes Sentinel-2 processing baselines with what Earth Engine serves
    now: 47 of its 79 comparable dates differ from the current archive by up to 0.10 NDVI (RMSE 0.029,
    mean +0.005, r = 0.976). All of them are baseline 05.00; every baseline 02.xx date matches
-   exactly. Reprocessing by ESA after the export is the likely cause (not verified).
+   exactly. The cause is reprocessing: Earth Engine's `GENERATION_TIME` shows every baseline-02.xx scene (all of which match) was generated the day it was sensed,
+   while all 47 mismatching baseline-05.00 scenes were generated 757-1,506 days after sensing (Nov 2022 to 2023); the two baseline-05.00 scenes that still match are also
+   reprocessed ones (verified 2026-10-17).
 2. The collection the research script used (`COPERNICUS/S2_SR`) is deprecated, now returns 74 images
    instead of 135 for the same filter, and carries the +1000 reflectance offset on baseline 05.00
    scenes (NDVI about 0.41 where harmonised gives about 0.69). It cannot reproduce or continue the
@@ -96,4 +98,5 @@ S2 has 91 valid observations after the extreme-value filter (min 0.4). Window 7,
 - SoS and EoS dates are stable across floors >= 0.06 (SoS 2020 day 334, EoS 2020 day 150). The 2020 SoS is the
   same with no filter (day 334), so its 25-day move versus the old series comes from the data version, not
   the filter.
-- Not verified: other window / k combinations beyond window 5-15 and k = 3 (k was not varied here).
+- k was varied on the current series (`scripts/audit/satellite_k_window_reaudit.py`, k 2.5 / 3 / 4 x window 5-15): S2 is independent of k at the 0.08 floor
+  (1 point removed at windows 5 and 7); the dependence on the window (>= 11 loses up to 0.141 in peak value) is as above.
