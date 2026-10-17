@@ -48,7 +48,7 @@ Anything that would change a scientific claim without a decision from the author
 | raw RMSE / R² | 0.1494 / 0.957 | unchanged |
 | other sources, all SoS/PoS/EoS dates | reference | unchanged |
 
-With `--nsrs3-factor 1.4` the outputs (`RH_NDVI_final_result.csv`, `phenology_markers.csv`) are **byte-identical** to the original code at `57023ae`, run in the same environment. To reproduce the pre-change outputs exactly, use that flag. The manuscript's Tables 3 and 4 were computed with ×1.4 while Table 2 and the text say ×1.36; the research documents are being aligned to the derived factor (see `manuscript-comparison.md`).
+*Measured before change 9 (outlier filter); superseded by its table.* With the old filter, `--nsrs3-factor 1.4` was **byte-identical** to the original code at `57023ae`. That is no longer reproducible, because the legacy filter was removed. To reproduce the pre-change outputs exactly, use that flag. The manuscript's Tables 3 and 4 were computed with ×1.4 while Table 2 and the text say ×1.36; the research documents are being aligned to the derived factor (see `manuscript-comparison.md`).
 
 **Check:** `grep -rn "1\.4" src scripts` should show the thesis value only in `nsrs_calibration.py` (docs and comparison) and unrelated linewidths.
 
@@ -163,18 +163,18 @@ PYTHONPATH=src:. MPLBACKEND=Agg python scripts/run_rh_ndvi.py \
     --ims-dir  data/research_results/IMS \
     --out-dir  data/results_review_check             # fails at step 12 without contextily
 
-# pre-change NSRS_3 (identical to the old code), or no calibration:
+# fixed NSRS_3 factor, or no calibration:
 #   add  --nsrs3-factor 1.4   or   --nsrs3-factor none
 
 python scripts/fov_canopy_fraction.py --sensor-height 6 --crown-top 5 --crown-diameter 6
 ```
 
-Expected calibration lines in `auto` mode: `NSRS_3 factor derived from data: 1.364 (thesis: 1.4)` and `RMSE raw: 0.1494  published ×1.4: 0.0329  (optimal ×1.364: 0.0299)`.
+Expected calibration lines in `auto` mode: `NSRS_3 factor derived from data: 1.384 (thesis: 1.4)` and `RMSE raw: 0.1589  published ×1.4: 0.0409  (optimal ×1.384: 0.0405)`.
 
 ## Review checklist
 
 - [ ] No literal 1.4 is applied anywhere in `src` or `scripts` (only `NSRS3_PUBLISHED_FACTOR`, for comparison)
-- [ ] `--nsrs3-factor 1.4` output equals the pre-change output; `none` leaves NSRS_3 unscaled
+- [ ] `--nsrs3-factor 1.4` applies exactly 1.4 to NSRS_3; `none` leaves NSRS_3 unscaled
 - [ ] Marker filter (4) affects plotting only; `extract_phenology` and the CSV are unchanged
 - [ ] Equal-span change (5) changes axis limits only, not data
 - [ ] Panel A (6) plots every observation and breaks raw and corrected NSRS_3 at the same gaps
