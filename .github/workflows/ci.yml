@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish after tests pass (dev = TestPyPI from this branch; release = PyPI, main only)"
+        type: choice
+        options: [none, dev, release]
+        default: none
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - run: pip install -e . pytest
+      - run: python -m pytest -q
+        env:
+          MPLBACKEND: Agg
+
+  build:
+    needs: test
+    # Publishing is manual only: workflow_dispatch with publish != none.
+    if: github.event_name == 'workflow_dispatch' && inputs.publish != 'none'
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Set version
+        id: ver
+        run: |
+          base=$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml | head -1)
+          if [ "${{ inputs.publish }}" = "release" ]; then
+            if [ "${{ github.ref }}" != "refs/heads/main" ]; then
+              echo "Release publishing is only allowed from main" >&2; exit 1
+            fi
+            version="$base"
+          else
+            # PEP 440 dev release: PyPI rejects local versions (+branch) and
+            # letters in .devN, so the branch is recorded in the summary instead.
+            version="${base}.dev${{ github.run_number }}"
+            sed -i "0,/^version = \".*\"/s//version = \"${version}\"/" pyproject.toml
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          branch="${{ github.head_ref || github.ref_name }}"
+          echo "Version \`$version\` built from branch \`$branch\` (${GITHUB_SHA::7})" >> "$GITHUB_STEP_SUMMARY"
+      - run: pip install build && python -m build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish-dev:
+    needs: build
+    if: inputs.publish == 'dev'
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  publish-release:
+    needs: build
+    if: inputs.publish == 'release'
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
