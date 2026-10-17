@@ -96,6 +96,51 @@ modis = DataSource.from_csv("MODIS", "data/raw/RH/MODIS.csv", modis_config)
 site.add_satellite(modis)
 ```
 
+### Same-date duplicates (per-image exports)
+
+A per-image export can list one date twice, e.g. Landsat when the site lies in the overlap of two
+adjacent rows of one path (the RH point: path 174, rows 37 and 38). Set `average_same_date=True` in
+`SourceConfig` (`"average_same_date": True` in the script's config dict) to average rows that share a
+timestamp when loading. Off by default; the RH L8 source uses it.
+
+### Outlier-filter options for sparse satellite series
+
+`filter_outliers_sliding_window` counts *observations*, which spans very different time intervals for daily
+MODIS and for S2/L8. Two ways to adapt it per source (see
+`docs/features/satellite-data-cleaning-audit-report.md`):
+
+- raise `outlier_min_threshold` (the NDVI floor of the removal threshold; default 0.02, tuned for daily
+  ground sensors) — what `run_rh_ndvi.py` does for S2 (0.08);
+- `outlier_window_days=15, outlier_direction="down"` — a calendar window that removes only low outliers
+  (cloud and atmosphere lower NDVI). Not used by the research pipeline; planned default after hand-over.
+
+### Which sources take part in the analysis
+
+Satellite sources are checked for data sufficiency before phenology, decomposition and the comparative
+figures (`lensky_py_lab.pipeline.eligibility`). The rules look at valid data inside the NSRS observation
+window, after the extreme-value filter and before the outlier filter, so the verdict does not depend on
+filter settings or on any result:
+
+| Rule | Default |
+|---|---|
+| `min_valid_dates` — distinct valid observation dates in the window | 40 |
+| `min_month_coverage` — fraction of months in the window with at least one valid observation | 0.60 |
+
+All rules must hold. The thresholds are judgment calls set after the RH data had been seen: S2 passes
+narrowly (45 dates, 0.65 coverage) and L8 fails narrowly (32 dates, 0.58). Report them in the Methods, and
+change them only with a reason.
+
+```python
+from lensky_py_lab.pipeline.eligibility import EligibilityRules, evaluate_eligibility
+table = evaluate_eligibility(satellite_sources, nsrs_sources, EligibilityRules())
+```
+
+`scripts/run_rh_ndvi.py` applies the rules by default (`--eligibility enforce`), writes
+`source_eligibility.csv` (measures, verdict, reasons), and leaves failing sources out of the analysis.
+`--eligibility report` only writes the table; `--exclude L8` leaves a source out regardless of the rules.
+Left-out sources are still processed, still get their data-cleaning figure, and **stay in the
+data-availability chart**, labelled "(excluded)".
+
 ### Query satellite data from Google Earth Engine
 
 ```python

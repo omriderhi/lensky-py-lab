@@ -142,3 +142,18 @@ Effect: observation windows are now twice as wide in time, and the **L8 floor no
 floors 0.02 to 0.15 all remove the top-3 values (0.78, 0.74, 0.73) plus 0.69; only window 5 with floor 0.15 (or no filter) keeps them. L8 PoS value, window-7 + floor 0.10:
 2020 0.641 and 2021 **0.538**, against 0.734 and 0.772 with no filter or the downward-only ±15 d option. S2 is unaffected. So the L8 part of the Decision above rests on a tuning that held only on the duplicated series;
 it needs the author's revisit (options: no outlier filter for L8, or the downward-only calendar window now).
+
+## Update: L8 excluded from the analysis by data-sufficiency rules
+
+Given the addendum above, L8 is left out of phenology, Table 4 and the comparative/decomposition figures, by rule rather than by choice: `lensky_py_lab.pipeline.eligibility`
+(>= 40 valid dates in the NSRS window and valid data in >= 60 % of months, judged after the extreme filter and before the outlier filter). RH verdicts (`source_eligibility.csv`):
+
+| Source | valid dates in window | month coverage | verdict |
+|---|---|---|---|
+| MODIS | 523 | 1.00 | in |
+| S2 | 45 | 0.65 | in (narrowly) |
+| L8 | 32 | 0.58 | out (both rules) |
+
+The thresholds are judgment calls set after the data had been seen; L8 fails and S2 passes by small margins, so the Methods must state the rules and the numbers. L8 stays in the data-availability
+chart ("(excluded)") and is still processed and shown in its data-cleaning figure. The L8 filter question therefore no longer affects the paper; the L8 floor (0.10) stays in the config only so that the processed L8 series is not cut when inspected.
+Full run: `python scripts/run_rh_ndvi.py --data-dir data/research_results/RH_NDVI --ims-dir data/research_results/IMS --out-dir <dir>`.
