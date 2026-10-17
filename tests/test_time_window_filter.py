@@ -58,3 +58,17 @@ def test_from_notebook_dict_and_processor_dispatch():
     v[30] = 0.1
     out = process_source(_frame(v), cfg)
     assert np.isnan(out[NDVI_CLEAN_FIELD].iloc[30]) and NDVI_LOWESS_FIELD in out
+
+
+def test_average_same_date_collapses_pairs_and_config_flag(tmp_path):
+    from lensky_py_lab import DataSource
+    from lensky_py_lab.io.csv_loader import average_same_date, load_source_csv
+    csv = tmp_path / "L8.csv"
+    csv.write_text("DATE,NDVI_RAW\n\"Jan 7, 2018\",0.60\n\"Jan 7, 2018\",0.58\n\"Jan 23, 2018\",0.50\n")
+    raw = load_source_csv(csv)
+    assert len(raw) == 3
+    out = average_same_date(raw)
+    assert len(out) == 2 and out[NDVI_RAW_FIELD].iloc[0] == pytest.approx(0.59)
+    assert len(DataSource.from_csv("L8", csv, SourceConfig()).raw_data) == 3
+    assert len(DataSource.from_csv("L8", csv, SourceConfig(average_same_date=True)).raw_data) == 2
+    assert SourceConfig.from_notebook_dict({"average_same_date": True}).average_same_date

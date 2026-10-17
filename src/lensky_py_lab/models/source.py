@@ -8,7 +8,7 @@ import pandas as pd
 
 from lensky_py_lab.configs import SourceConfig
 from lensky_py_lab.constants import NDVI_LOWESS_FIELD
-from lensky_py_lab.io.csv_loader import load_source_csv
+from lensky_py_lab.io.csv_loader import average_same_date, load_source_csv
 from lensky_py_lab.pipeline.processor import process_source
 
 
@@ -37,7 +37,10 @@ class DataSource:
         config: SourceConfig,
     ) -> DataSource:
         """Load a source from a CSV file (same format as the original research CSVs)."""
-        return cls(name=name, config=config, raw_data=load_source_csv(path))
+        df = load_source_csv(path)
+        if config.average_same_date:
+            df = average_same_date(df)
+        return cls(name=name, config=config, raw_data=df)
 
     @classmethod
     def from_dataframe(

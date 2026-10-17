@@ -130,3 +130,15 @@ The floor recovers the S2 and L8 2019/2021 peaks but **still removes the L8 2020
 - S2/L8 overlap with NSRS is 16–29 dates; metric differences of ~0.01 are not resolvable.
 - The `.docx` manuscript was not opened; the list of affected cells follows the spec's list and the numbers above.
 - `scripts/run_rh_ndvi.py` was not re-run end-to-end with the new option; the audit used the same pipeline functions on the same CSVs.
+
+## Addendum: L8 same-date duplicates (supersedes the L8 floor results above)
+
+The L8 CSV lists 22 dates twice. Earth Engine shows why: the site lies in the overlap of rows 37 and 38 of path 174 (`LANDSAT/LC08/C02/T1_L2`),
+so one overpass is exported as two scenes about 24 s apart (values differ by ~0.01). They are one observation. `SourceConfig.average_same_date` /
+`average_same_date()` now averages them (enabled for L8 in `run_rh_ndvi.py`; MODIS, S2 and NSRS have no duplicate timestamps). L8 then has 51 distinct valid dates, not 73 rows.
+The original `C01` collection no longer exists in Earth Engine, so the CSV could not be regenerated or compared value by value.
+
+Effect: observation windows are now twice as wide in time, and the **L8 floor no longer protects the peaks**. With window 7 the removal is driven by the MAD term, not the floor:
+floors 0.02 to 0.15 all remove the top-3 values (0.78, 0.74, 0.73) plus 0.69; only window 5 with floor 0.15 (or no filter) keeps them. L8 PoS value, window-7 + floor 0.10:
+2020 0.641 and 2021 **0.538**, against 0.734 and 0.772 with no filter or the downward-only ±15 d option. S2 is unaffected. So the L8 part of the Decision above rests on a tuning that held only on the duplicated series;
+it needs the author's revisit (options: no outlier filter for L8, or the downward-only calendar window now).

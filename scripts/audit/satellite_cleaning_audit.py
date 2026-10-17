@@ -24,7 +24,13 @@ from scipy.signal import savgol_filter
 
 from lensky_py_lab import DataSource, Site, SourceConfig
 from lensky_py_lab.constants import NDVI_CLEAN_FIELD, NDVI_FILTERED_FIELD, NDVI_LOWESS_FIELD, NDVI_RAW_FIELD
-from lensky_py_lab.io.csv_loader import load_source_csv
+from lensky_py_lab.io.csv_loader import average_same_date, load_source_csv as _load_csv
+
+
+def load_source_csv(path):
+    """Load a source CSV; same-date rows are averaged (L8 adjacent-row duplicates)."""
+    return average_same_date(_load_csv(path))
+
 from lensky_py_lab.phenology.decomposition_validation import compute_decomposition_stats
 from lensky_py_lab.phenology.phenolopy_integration import decompose_woody_herbaceous, extract_phenology
 from lensky_py_lab.pipeline.cleaner import (
