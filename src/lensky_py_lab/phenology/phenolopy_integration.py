@@ -36,8 +36,10 @@ The Helman (2015) method decomposes NDVI into:
 
 References
 ----------
-Helman, D. et al. (2015). "Soil moisture as a key factor in carbon flux
-partitioning in a dryland forest ecosystem". Remote Sensing of Environment.
+Helman, D., Lensky, I. M., Tessler, N., & Osem, Y. (2015). "A phenology-based
+method for monitoring woody and herbaceous vegetation in Mediterranean forests
+from NDVI time series". Remote Sensing, 7(9), 12314-12335.
+doi:10.3390/rs70912314
 """
 
 from __future__ import annotations
