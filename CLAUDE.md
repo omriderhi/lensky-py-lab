@@ -84,6 +84,7 @@ Scripts in `scripts/`:
 - `run_rh_ndvi.py` — full RH_NDVI pipeline (steps 1–11)
 - `example_rh_ndvi.py` — minimal end-to-end example
 - `run_daily_graphs.py` — standalone intra-day NSRS figures from `.dat` files
+- `fov_canopy_fraction.py` — share of the NSRS_3 signal coming from the crown (reviewer [18]); defaults are placeholders and the script says so when used
 - `_gen_local_notebook.py` — one-off: generates a local copy of the archive notebook
 
 ## Data flow
