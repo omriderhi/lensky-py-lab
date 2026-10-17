@@ -41,6 +41,20 @@ def load_source_csv(path: Union[str, Path]) -> pd.DataFrame:
     return df
 
 
+def average_same_date(df: pd.DataFrame) -> pd.DataFrame:
+    """Collapse rows that share a timestamp into one row holding their mean NDVI.
+
+    A Landsat overpass can reach the same site through two adjacent scenes (same
+    path, neighbouring rows, seconds apart), so a per-image export lists one date twice.
+    Those are one observation, not two. The ``DATE`` value of the first row is kept.
+    """
+    if df.index.is_unique:
+        return df
+    first = df.groupby(level=0, sort=True).first()
+    first[NDVI_RAW_FIELD] = df.groupby(level=0, sort=True)[NDVI_RAW_FIELD].mean()
+    return first
+
+
 def load_ims_csvs(
     paths: List[Union[str, Path]],
     collect_rain_code: bool = False,

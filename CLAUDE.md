@@ -61,6 +61,7 @@ src/lensky_py_lab/
 ├── pipeline/
 │   ├── cleaner.py        # filter_extreme_values, filter_outliers_sliding_window
 │   ├── smoother.py       # add_lowess (statsmodels LOWESS)
+│   ├── eligibility.py    # EligibilityRules, evaluate_eligibility — which satellites take part
 │   └── processor.py      # process_source — runs the full pipeline
 ├── clients/
 │   ├── ims_client.py     # IMSClient — IMS Envista REST API (api_key auth)
@@ -107,9 +108,15 @@ Scripts in `scripts/`:
 
 ## Outlier filter
 
-`filter_outliers_sliding_window()` (pipeline/cleaner.py): a point is removed when it deviates from the median of its centred `outlier_window` observations (default 7 in the scripts) by more than `max(outlier_k × 1.4826 × MAD, outlier_min_threshold)` (k = 3, floor 0.02 NDVI; MAD over a 31-observation window). The earlier `average_window` rule (a mean-deviation test against the global mean that kept outliers and dropped ordinary values) was removed; `SourceConfig.from_notebook_dict` raises if it sees `average_window`. The satellite sources use the same filter with the same settings, but those settings have not been audited — see `docs/features/satellite-data-cleaning-audit.md`.
+`filter_outliers_sliding_window()` (pipeline/cleaner.py): a point is removed when it deviates from the median of its centred `outlier_window` observations (default 7 in the scripts) by more than `max(outlier_k × 1.4826 × MAD, outlier_min_threshold)` (k = 3, floor 0.02 NDVI; MAD over a 31-observation window). The earlier `average_window` rule (a mean-deviation test against the global mean that kept outliers and dropped ordinary values) was removed; `SourceConfig.from_notebook_dict` raises if it sees `average_window`. The satellite sources use the same filter; S2 has a raised floor (0.08) because 0.02 removed real peaks on sparse series — audited in `docs/features/satellite-data-cleaning-audit-report.md`.
 
 `extract_phenology()` reports an end of season only if the curve falls below the threshold before the record ends; otherwise `EoS_censored` is True and `EoS_date` / `EoS_value` / `EoS_doy` are NaT / NaN.
+
+## Source eligibility and duplicates
+
+- `pipeline/eligibility.py`: a satellite takes part in phenology / decomposition / comparative figures only if it has ≥ 40 valid dates inside the NSRS window and valid data in ≥ 60 % of its months (measured after the extreme filter, before the outlier filter). `run_rh_ndvi.py --eligibility enforce|report`, `--exclude <SOURCE>`; verdicts in `source_eligibility.csv`. Excluded sources stay in the data-availability chart ("(excluded)"). Current RH verdicts: MODIS and S2 pass (S2 narrowly), L8 fails (32 dates, coverage 0.58). Thresholds are judgment calls — see README.
+- `SourceConfig.average_same_date` averages rows sharing a timestamp at load (L8: one overpass exported as two adjacent-row scenes). On for L8 in `run_rh_ndvi.py`.
+- `SourceConfig.outlier_window_days` / `outlier_direction` select the calendar-window, optionally downward-only outlier filter (`filter_outliers_time_window`). Not used by the research config; the planned satellite default after hand-over. S2 uses a raised `outlier_min_threshold` (0.08) instead. See `docs/features/satellite-data-cleaning-audit-report.md`.
 
 ## Phenological markers
 

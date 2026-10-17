@@ -86,6 +86,7 @@ from lensky_py_lab.phenology.phenolopy_integration import (
     decompose_woody_herbaceous,
     extract_phenology,
 )
+from lensky_py_lab.pipeline.eligibility import evaluate_eligibility
 from lensky_py_lab.plotting.plotter import plot_cleaning_pipeline, plot_site, plot_data_availability
 from lensky_py_lab.sensors.nsrs_calibration import (
     apply_nsrs3_factor,
@@ -115,8 +116,12 @@ from lensky_py_lab.visualization.orientation_map import (
 NOTEBOOK_CONFIGS: dict = {
     # Satellite sources
     "MODIS":    {"min": False,  "max": 0.8,   "outlier_window": 7, "images_per_month": 30},
-    "S2":       {"min": 0.4,    "max": False,  "outlier_window": 7, "images_per_month": 5},
-    "L8":       {"min": 0.4,    "max": False,  "outlier_window": 7, "images_per_month": 4},
+    # L8: the point lies in the overlap of rows 37/38 of path 174, so one overpass is exported twice
+    # (average_same_date). S2/L8 use a higher outlier floor (NDVI units): the default 0.02 was set for daily ground
+    # sensors and removes real peaks from sparse series. See
+    # docs/features/satellite-data-cleaning-audit-report.md (Decision).
+    "S2":       {"min": 0.4,    "max": False,  "outlier_window": 7, "outlier_min_threshold": 0.08, "images_per_month": 5},
+    "L8":       {"min": 0.4,    "max": False,  "outlier_window": 7, "outlier_min_threshold": 0.10, "average_same_date": True, "images_per_month": 4},
     # Ground sensors
     "NSRS_1":   {"min": 0.2,    "max": False,  "outlier_window": 7,   "images_per_month": 30},
     "NSRS_2":   {"min": 0.2,    "max": False,  "outlier_window": 7,   "images_per_month": 30},
@@ -137,9 +142,15 @@ _NSRS_BASE_NAMES = {k for k in NOTEBOOK_CONFIGS if k.startswith("NSRS") and not 
 # ────────────────────────────────────────────────────────────────────────────
 
 def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = None,
-        nsrs3_factor: str = "auto") -> None:
+        nsrs3_factor: str = "auto", eligibility: str = "enforce",
+        exclude: tuple = ()) -> None:
     """``nsrs3_factor``: ``"auto"`` derives the NSRS_3 factor from the data,
-    ``"none"`` leaves NSRS_3 uncalibrated, a number applies that fixed factor."""
+    ``"none"`` leaves NSRS_3 uncalibrated, a number applies that fixed factor.
+
+    ``eligibility``: ``"enforce"`` leaves satellites that fail the data-sufficiency rules
+    (``lensky_py_lab.pipeline.eligibility``) out of the analysis; ``"report"`` only writes
+    the verdicts. ``exclude`` names sources to leave out regardless. Excluded sources are
+    still processed and still shown in the data-availability chart."""
     # ── output sub-directories ───────────────────────────────────────────────
     out_cleaning      = out_dir / "figures" / "data_cleaning" / "RH_NDVI"
     out_final         = out_dir / "figures" / "final"
@@ -226,6 +237,17 @@ def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = 
     print("=" * 60)
     print("Step 5-6: Assembling site and joining sources")
     print("=" * 60)
+
+    elig = evaluate_eligibility(sat_sources, nsrs_sources)
+    elig["excluded_manually"] = elig["source"].isin(exclude)
+    elig["in_analysis"] = (elig["eligible"] | (eligibility == "report")) & ~elig["excluded_manually"]
+    elig.to_csv(out_dir / "source_eligibility.csv", index=False)
+    print(elig.to_string(index=False))
+    excluded = elig.loc[~elig["in_analysis"], "source"].tolist()
+    if excluded:
+        print(f"  Left out of the analysis (kept in the availability chart): {excluded}")
+    all_sat_sources = dict(sat_sources)
+    sat_sources = {n: d for n, d in sat_sources.items() if n not in excluded}
 
     site = Site(
         name="RH_NDVI",
@@ -350,7 +372,9 @@ def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = 
     print(f"  → {out_final / 'RH_NDVI_timeseries.png'}")
 
     # Data availability chart
-    fig_avail = plot_data_availability("RH_NDVI", site_df)
+    avail_df = Site(name="RH_NDVI", nsrs_sources=nsrs_sources,
+                    satellite_sources=all_sat_sources).run_analysis()
+    fig_avail = plot_data_availability("RH_NDVI", avail_df, excluded=excluded)
     fig_avail.savefig(out_final / "RH_NDVI_data_availability.png", dpi=SAVE_DPI, bbox_inches="tight")
     plt.close(fig_avail)
     print(f"  → {out_final / 'RH_NDVI_data_availability.png'}")
@@ -425,6 +449,8 @@ def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = 
     except ImportError:
         print("  Skipping site location map (cartopy not installed).")
         print("  Install with: pip install cartopy  or  pip install 'lensky-py-lab[maps]'")
+    except Exception as exc:   # e.g. no network for the basemap tiles
+        warnings.warn(f"Skipping site location map: {exc.__class__.__name__}")
 
     print()
     print("=" * 60)
@@ -651,6 +677,23 @@ def _parse_args() -> argparse.Namespace:
             "'none' leaves NSRS_3 uncalibrated, or a number (e.g. 1.4) applies that factor."
         ),
     )
+    p.add_argument(
+        "--eligibility",
+        choices=["enforce", "report"],
+        default="enforce",
+        help=(
+            "Data-sufficiency rules for satellites: 'enforce' (default) leaves failing sources "
+            "out of phenology, decomposition and comparative figures; 'report' only writes "
+            "source_eligibility.csv. Excluded sources stay in the data-availability chart."
+        ),
+    )
+    p.add_argument(
+        "--exclude",
+        nargs="*",
+        default=[],
+        metavar="SOURCE",
+        help="Satellite sources to leave out of the analysis regardless of the rules (e.g. L8).",
+    )
     return p.parse_args()
 
 
@@ -662,4 +705,6 @@ if __name__ == "__main__":
         out_dir=Path(args.out_dir),
         dat_dir=Path(args.dat_dir) if args.dat_dir else None,
         nsrs3_factor=args.nsrs3_factor,
+        eligibility=args.eligibility,
+        exclude=tuple(args.exclude),
     )

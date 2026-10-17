@@ -91,6 +91,52 @@ def filter_outliers_sliding_window(df: pd.DataFrame, config: SourceConfig) -> pd
     return df
 
 
+_SECONDS_PER_DAY = 86400
+# Half-width (days) of the window over which the residual MAD is taken in the
+# time-window filter; the observation-window filter uses 31 observations.
+_TIME_SCALE_HALF_DAYS = 90
+
+
+def filter_outliers_time_window(df: pd.DataFrame, config: SourceConfig) -> pd.DataFrame:
+    """Calendar-window outlier detection on ``NDVI filtered`` -> ``NDVI clean``.
+
+    Same test as :func:`filter_outliers_sliding_window` (residual from the window
+    median against ``max(outlier_k x 1.4826 x MAD, outlier_min_threshold)``), but the
+    window is every observation within ``+-config.outlier_window_days`` days, and the
+    MAD is taken over ``+-90`` days. A window defined in days covers the same time span
+    for daily, 5-day and 16-day series, which an observation count does not.
+
+    With ``config.outlier_direction == "down"`` only points *below* the window median
+    are removed: cloud and atmospheric contamination lower NDVI, so a high value next
+    to a depressed neighbour is more likely the true signal than an outlier.
+
+    If ``config.outlier_window_days`` is None the filtered values are copied unchanged.
+    """
+    if config.outlier_direction not in ("both", "down"):
+        raise ValueError("outlier_direction must be 'both' or 'down'")
+    df = df.copy()
+    x = pd.to_numeric(df[NDVI_FILTERED_FIELD], errors="coerce")
+    obs = x.dropna()
+    if config.outlier_window_days is None or obs.empty:
+        df[NDVI_CLEAN_FIELD] = x
+        return df
+
+    t = obs.index.values.astype(float)
+    v = obs.values
+    half = float(config.outlier_window_days) * _SECONDS_PER_DAY
+    scale_half = _TIME_SCALE_HALF_DAYS * _SECONDS_PER_DAY
+    med = np.array([np.median(v[np.abs(t - ti) <= half]) for ti in t])
+    resid = v - med
+    sigma = np.array([
+        _MAD_TO_SIGMA * np.median(np.abs(resid[np.abs(t - ti) <= scale_half])) for ti in t
+    ])
+    threshold = np.maximum(config.outlier_k * sigma, config.outlier_min_threshold)
+    bad = resid < -threshold if config.outlier_direction == "down" else np.abs(resid) > threshold
+
+    df[NDVI_CLEAN_FIELD] = pd.Series(np.where(bad, np.nan, v), index=obs.index).reindex(df.index)
+    return df
+
+
 def _is_numeric(val: object) -> bool:
     try:
         float(val)  # type: ignore[arg-type]

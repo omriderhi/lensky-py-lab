@@ -283,6 +283,7 @@ def plot_data_availability(
     site_name: str,
     site_df: pd.DataFrame,
     figsize: Optional[tuple] = None,
+    excluded: Optional[list] = None,
 ) -> Figure:
     """Horizontal timeline showing data coverage for every NDVI source.
 
@@ -299,11 +300,15 @@ def plot_data_availability(
         indexed by unix timestamp.
     figsize : tuple, optional
         Override ``(width, height)`` in inches.
+    excluded : list of str, optional
+        Source names left out of the analysis; their row is kept and labelled
+        "(excluded)".
 
     Returns
     -------
     matplotlib.figure.Figure
     """
+    excluded = set(excluded or [])
     lowess_cols = [c for c in site_df.columns if c.startswith(f"{NDVI_LOWESS_FIELD} ")]
     n = len(lowess_cols)
     if n == 0:
@@ -324,8 +329,11 @@ def plot_data_availability(
                          colors=color, linewidths=2.0)
 
     ax.set_yticks(range(n))
-    ax.set_yticklabels([c.removeprefix(f"{NDVI_LOWESS_FIELD} ") for c in lowess_cols],
-                       fontsize=9)
+    ax.set_yticklabels(
+        [c.removeprefix(f"{NDVI_LOWESS_FIELD} ")
+         + (" (excluded)" if c.removeprefix(f"{NDVI_LOWESS_FIELD} ") in excluded else "")
+         for c in lowess_cols],
+        fontsize=9)
     ax.set_ylim(-0.5, n - 0.5)
     ax.set_xlabel("Date", fontsize=11)
     ax.set_title(f"{site_name} — Data Availability", fontsize=12, fontweight="bold")
