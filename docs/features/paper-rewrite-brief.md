@@ -79,6 +79,7 @@ Phenology (hydrological year Y = Sep Y-1 to Aug Y), MODIS and S2 (the CSV dates 
 ## 6. Manuscript cells and sentences that change (check each against the `.docx`)
 
 - **Section 2.4.1:** per section 2.
+- **Table S1 (observations per sensor per month):** now produced by the pipeline as `observations_per_month.csv`; insert as is.
 - **Table 3 satellite rows:** MODIS and S2 per section 5; L8 rows removed. MODIS PoS values are 0.03-0.11 lower than any pre-v12 values.
 - **Table 4:** MODIS and S2 rows per section 5 (L8 rows not shown: n = 24-26 and no seasonal peak coverage, so its decomposition does not support a comparison).
 - **Sections 3.1-3.2:** any quoted satellite peak / EoS date, and any statement that L8 agrees (or not) with NSRS.
