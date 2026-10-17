@@ -35,20 +35,20 @@ Anything that would change a scientific claim without a decision from the author
 - `apply_nsrs3_factor(sources, factor)` applies a fixed factor; applying twice raises `ValueError`.
 - `clear_active_factor()` is called at the start of every `run()`, so no factor leaks between runs in one process.
 - `run_rh_ndvi.py --nsrs3-factor auto|none|<number>` (default `auto`). Step 9 (validation figure and `calibration_statistics.csv`) only runs in `auto` mode.
-- `get_logger_ndvi` (daily graphs) calibrates sensor 3 only if a factor was registered in the same process; otherwise it returns uncalibrated values silently.
-- `NSRS3_PUBLISHED_FACTOR = 1.4` survives **only** as the thesis value for comparison (`published_factor`, `published_factor_rmse`). It is never applied.
+- `get_logger_ndvi` (daily graphs) calibrates sensor 3 only if a factor was registered in the same process. `run_rh_ndvi.py` registers it before its daily-graph step. The standalone `scripts/run_daily_graphs.py` has the same `--nsrs3-factor auto|none|<number>` option; `auto` derives the factor from the NSRS CSVs in `--data-dir` / `RH_DATA_DIR`, and without them sensor 3 is left uncalibrated with a printed notice.
+- `NSRS3_PUBLISHED_FACTOR = 1.4` survives **only** as the earlier hardcoded value, for comparison (`published_factor`, `published_factor_rmse`). It is never applied. The manuscript (v12) reports the optimum, 1.36, which the derived 1.364 reproduces.
 - `apply_calibration(series, factor=None)` raises if no factor is given and none is registered.
 
 **Numeric impact** (measured on `data/research_results/RH_NDVI`):
 
-| | thesis (1.4) | derived (1.364) |
+| | earlier code (1.4) | derived (1.364) |
 |---|---|---|
 | NSRS_3 values | reference | about 2.6 % lower (ratio 0.9737 to 0.9747) |
 | Fig 5 panel C RMSE | 0.0329 | 0.0299 |
 | raw RMSE / R² | 0.1494 / 0.957 | unchanged |
 | other sources, all SoS/PoS/EoS dates | reference | unchanged |
 
-With `--nsrs3-factor 1.4` the outputs (`RH_NDVI_final_result.csv`, `phenology_markers.csv`) are **byte-identical** to the original code at `57023ae`, run in the same environment. To reproduce the thesis numbers exactly, use that flag. Tables 3 and 4 were not recomputed; the satellite-vs-NSRS_3 full-signal comparison in Table 4 is the one to re-check.
+With `--nsrs3-factor 1.4` the outputs (`RH_NDVI_final_result.csv`, `phenology_markers.csv`) are **byte-identical** to the original code at `57023ae`, run in the same environment. To reproduce the pre-change outputs exactly, use that flag. The manuscript's Tables 3 and 4 were computed with ×1.4 while Table 2 and the text say ×1.36; the research documents are being aligned to the derived factor (see `manuscript-comparison.md`).
 
 **Check:** `grep -rn "1\.4" src scripts` should show the thesis value only in `nsrs_calibration.py` (docs and comparison) and unrelated linewidths.
 
@@ -119,7 +119,7 @@ The console line used to print the RMSE at the optimal factor as "after". It now
 4. **Marker/line colour clash.** NSRS_1's line and the PoS marker are both `#D55E00`, and markers carry no sensor identity.
 5. **In-figure titles** with internal names (`RH_NDVI — NSRS vs MODIS`).
 6. **Phenology method naming.** The manuscript names Phenolopy, but the code is a native Savitzky–Golay + 20 % seasonal-amplitude implementation. Only the manuscript text needs to change.
-7. **Manuscript numbers.** The manuscript text and Tables 3/4 have not been compared against the regenerated outputs; the derived factor (1.364 vs the published 1.4) shifts NSRS_3 values by about 2.6 %.
+7. **Manuscript edits.** The comparison against the regenerated outputs is done (`manuscript-comparison.md`); the manuscript itself has not been edited. Decision taken: the manuscript is aligned to the derived factor (1.36), so Tables 3/4 and Section 3.2 need the updated NSRS_3 numbers listed there.
 
 ## How to reproduce
 
@@ -133,7 +133,7 @@ PYTHONPATH=src:. MPLBACKEND=Agg python scripts/run_rh_ndvi.py \
     --ims-dir  data/research_results/IMS \
     --out-dir  data/results_review_check             # fails at step 12 without contextily
 
-# thesis-exact NSRS_3 (identical to the pre-change code), or no calibration:
+# pre-change NSRS_3 (identical to the old code), or no calibration:
 #   add  --nsrs3-factor 1.4   or   --nsrs3-factor none
 
 python scripts/fov_canopy_fraction.py --sensor-height 6 --crown-top 5 --crown-diameter 6
