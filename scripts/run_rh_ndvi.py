@@ -26,6 +26,7 @@ Inputs:
 Outputs (all under data/results/):
     figures/data_cleaning/RH_NDVI/<source>.png   — per-source cleaning pipeline
     figures/final/RH_NDVI_timeseries.png          — publication site time-series
+    figures/final/RH_NDVI_<MODIS|S2>_vs_NSRS_timeseries.png — satellite + NSRS + IMS rain/temp + phenology dots
     figures/comparative/<source>_vs_NSRS.png     — satellite vs NSRS overlays
     figures/final/RH_NDVI_timeseries.tiff         — publication site time-series
     figures/comparative/<source>_vs_NSRS.png          — satellite vs NSRS overlays
@@ -130,6 +131,9 @@ NOTEBOOK_CONFIGS: dict = {
     "NSRS_2_B": {"min": 0.2,    "max": False,  "outlier_window": 7,   "images_per_month": 30},
     "NSRS_3_B": {"min": 0.2,    "max": False,  "outlier_window": 7,   "images_per_month": 30},
 }
+
+# Satellites that get a publication-style figure against NSRS (with IMS rainfall/temperature)
+PUBLICATION_SATELLITES = ("MODIS", "S2")
 
 # Which sources are ground sensors (NSRS) vs satellite
 _NSRS_SOURCES    = {k for k in NOTEBOOK_CONFIGS if k.startswith("NSRS")}
@@ -345,26 +349,29 @@ def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = 
         plt.close(fig_comp)
         print(f"  → {out_path.name}")
 
-    # MODIS + NSRS only — publication figure with IMS and phenology dots (figures/final/)
-    modis_nsrs_cols = [c for c in site_df.columns
-                       if c.startswith(f"{NDVI_LOWESS_FIELD} ")
-                       and any(s in c for s in ("MODIS", "NSRS"))]
-    if modis_nsrs_cols:
-        ims_cols = [c for c in site_df.columns if c in (IMS_RAINFALL_FIELD, IMS_TEMPERATURE_FIELD)]
-        keep_cols = modis_nsrs_cols + ims_cols
-        sub_modis_nsrs = (site_df[keep_cols].loc[nsrs_start:nsrs_end]
-                          if nsrs_start else site_df[keep_cols])
-        modis_nsrs_pheno = (pheno_df[pheno_df["satellite"].isin(
-            {c.removeprefix(f"{NDVI_LOWESS_FIELD} ") for c in modis_nsrs_cols}
+    # One satellite + NSRS publication figure per source in PUBLICATION_SATELLITES, with IMS and
+    # phenology dots (figures/final/RH_NDVI_<sat>_vs_NSRS_timeseries.png). A satellite that was
+    # left out of the analysis (eligibility) has no column here and is skipped.
+    ims_cols = [c for c in site_df.columns if c in (IMS_RAINFALL_FIELD, IMS_TEMPERATURE_FIELD)]
+    for sat_name in PUBLICATION_SATELLITES:
+        pub_cols = [c for c in site_df.columns
+                    if c.startswith(f"{NDVI_LOWESS_FIELD} ")
+                    and (c == f"{NDVI_LOWESS_FIELD} {sat_name}" or "NSRS" in c)]
+        if f"{NDVI_LOWESS_FIELD} {sat_name}" not in pub_cols:
+            continue
+        sub_pub = (site_df[pub_cols + ims_cols].loc[nsrs_start:nsrs_end]
+                   if nsrs_start else site_df[pub_cols + ims_cols])
+        pub_pheno = (pheno_df[pheno_df["satellite"].isin(
+            {c.removeprefix(f"{NDVI_LOWESS_FIELD} ") for c in pub_cols}
         )] if pheno_arg is not None else None)
-        fig_mn = plot_site_publication(
-            "RH_NDVI_MODIS_vs_NSRS",
-            sub_modis_nsrs,
-            phenology_df=modis_nsrs_pheno if (modis_nsrs_pheno is not None and not modis_nsrs_pheno.empty) else None,
+        fig_pub = plot_site_publication(
+            f"RH_NDVI_{sat_name}_vs_NSRS",
+            sub_pub,
+            phenology_df=pub_pheno if (pub_pheno is not None and not pub_pheno.empty) else None,
             output_dir=out_final,
         )
-        plt.close(fig_mn)
-        print(f"  → {out_final / 'RH_NDVI_MODIS_vs_NSRS_timeseries.png'}")
+        plt.close(fig_pub)
+        print(f"  → {out_final / f'RH_NDVI_{sat_name}_vs_NSRS_timeseries.png'}")
 
     # Publication-quality figure — no phenology markers on main graph
     pub_fig = plot_site_publication("RH_NDVI", site_df, output_dir=out_final)

@@ -145,6 +145,7 @@ All outputs go to `data/results/` (gitignored — regenerate by running `run_rh_
 |---|---|---|
 | Calibration validation (4-panel) | `figures/calibration/NSRS3_calibration_validation.png` | PNG |
 | Site time-series | `figures/final/<site>_timeseries.png` | PNG |
+| Satellite + NSRS + IMS publication (MODIS, S2) | `figures/final/RH_NDVI_<sat>_vs_NSRS_timeseries.png` | PNG |
 | Comparative (NSRS vs satellite) | `figures/comparative/<site>_NSRS_vs_<sat>.png` | PNG |
 | Data-cleaning pipeline | `figures/data_cleaning/<site>/<source>.png` | PNG |
 | Daily intra-day NDVI | `figures/daily_graphs/*.png` | PNG |
