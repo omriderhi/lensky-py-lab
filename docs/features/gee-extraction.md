@@ -1,5 +1,7 @@
 # Re-extracting satellite series from Google Earth Engine
 
+Paper-facing summary of all products and numbers: `satellite-data-products.md`.
+
 Choose per run which satellite series to pull again; every other source is read from the local CSVs.
 
 ```
@@ -55,5 +57,7 @@ on load). `gee_extraction_log.json` holds the comparison with the replaced file.
   Feb-Mar); PoS 2021 = 0.503 on 2020-11-26, which is not the seasonal peak. Table 4, L8 (n = 24-26): full signal MAE 0.023,
   r 0.87; woody r -0.32; herbaceous r 0.40. The eligibility rules count dates and months, not whether the peak season is
   sampled, so they do not catch this.
-- **Decision still open:** exclude L8 (`--exclude L8`), add a seasonal-coverage rule, or keep it. The L8 filter (floor 0.10,
-  window 7) has not been re-audited on the new series. Not verified.
+- **Decision (2026-10-17): L8 is excluded.** `MANUAL_EXCLUSIONS` in `scripts/run_rh_ndvi.py` (the default of `--exclude`; pass
+  `--exclude` with no names to apply only the rules). It stays in the data-availability figure ("(excluded)") and in its data-cleaning
+  figure. Not done: a seasonal-coverage rule; the L8 filter (floor 0.10, window 7) has not been re-audited on the new series.
+  Everything for the paper: `satellite-data-products.md`.

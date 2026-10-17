@@ -135,7 +135,8 @@ filter settings or on any result:
 | `min_month_coverage` — fraction of months in the window with at least one valid observation | 0.60 |
 
 All rules must hold. The thresholds are judgment calls set after the RH data had been seen: S2 passes
-narrowly (45 dates, 0.65 coverage) and L8 fails narrowly (32 dates, 0.58). Report them in the Methods, and
+(64 dates, 0.89 coverage); L8 passes with the re-extracted Collection-2 series (42 dates, 0.77) but is excluded by decision, because its
+winter coverage is too thin to show the seasonal peak (`MANUAL_EXCLUSIONS` in `run_rh_ndvi.py`). Report the rules in the Methods, and
 change them only with a reason.
 
 ```python
@@ -145,7 +146,7 @@ table = evaluate_eligibility(satellite_sources, nsrs_sources, EligibilityRules()
 
 `scripts/run_rh_ndvi.py` applies the rules by default (`--eligibility enforce`), writes
 `source_eligibility.csv` (measures, verdict, reasons), and leaves failing sources out of the analysis.
-`--eligibility report` only writes the table; `--exclude L8` leaves a source out regardless of the rules.
+`--eligibility report` only writes the table; `--exclude` leaves the named sources out regardless of the rules (default: `L8`, see `MANUAL_EXCLUSIONS`; `--exclude` with no names applies only the rules).
 Left-out sources are still processed, still get their data-cleaning figure, and **stay in the
 data-availability chart**, labelled "(excluded)".
 

@@ -20,7 +20,13 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Union
 import numpy as np
 import pandas as pd
 
-from lensky_py_lab.constants import DATE_FIELD, NDVI_RAW_FIELD, SatelliteSource
+from lensky_py_lab.clients.gee_client import _CLOUD_FILTER, _COLLECTIONS, _NDVI_MIN_DEFAULT
+from lensky_py_lab.constants import (
+    DATE_FIELD,
+    NDVI_RAW_FIELD,
+    SATELLITE_NATIVE_RESOLUTION_M,
+    SatelliteSource,
+)
 from lensky_py_lab.io.csv_loader import average_same_date, load_source_csv
 
 #: Research site (Ramat Hanadiv), the point used by the research GEE script.
@@ -173,7 +179,11 @@ def extract_sources(
         summaries[name] = {
             "file": target.name,
             "gee_source": spec.source.value,
-            "collection": asset or "client default (see gee_client._COLLECTIONS)",
+            "collection": asset or _COLLECTIONS[spec.source],
+            "cloud_filter": (f"{_CLOUD_FILTER[spec.source][0]} < {_CLOUD_FILTER[spec.source][1]}"
+                             if spec.source in _CLOUD_FILTER else None),
+            "ndvi_min_mask": _NDVI_MIN_DEFAULT,
+            "reducer_scale_m": SATELLITE_NATIVE_RESOLUTION_M[spec.source],
             "window": [spec.start, spec.end],
             "point_lon_lat": [RH_LON, RH_LAT],
             "rows": int(len(df)),

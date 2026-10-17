@@ -65,6 +65,8 @@ def test_written_in_loader_format_with_provenance(tmp_path):
     assert load_source_csv(tmp_path / "S2.csv")["NDVI RAW"].iloc[0] == pytest.approx(0.61)
     log = json.loads((tmp_path / PROVENANCE_FILE).read_text())
     assert log["S2"]["rows"] == 10 and log["S2"]["window"] == ["2019-01-01", "2021-12-05"]
+    assert log["S2"]["collection"] == "COPERNICUS/S2_SR_HARMONIZED"
+    assert log["S2"]["cloud_filter"] == "CLOUD_COVERAGE_ASSESSMENT < 10" and log["S2"]["ndvi_min_mask"] == 0.35
     assert log["S2"]["comparison_with_previous_file"]["previous_file"] is True
 
 

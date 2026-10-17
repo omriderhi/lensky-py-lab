@@ -157,3 +157,12 @@ Given the addendum above, L8 is left out of phenology, Table 4 and the comparati
 The thresholds are judgment calls set after the data had been seen; L8 fails and S2 passes by small margins, so the Methods must state the rules and the numbers. L8 stays in the data-availability
 chart ("(excluded)") and is still processed and shown in its data-cleaning figure. The L8 filter question therefore no longer affects the paper; the L8 floor (0.10) stays in the config only so that the processed L8 series is not cut when inspected.
 Full run: `python scripts/run_rh_ndvi.py --data-dir data/research_results/RH_NDVI --ims-dir data/research_results/IMS --out-dir <dir>`.
+
+## Update 2026-10-17: superseded by the re-extracted satellite series
+
+The L8 and S2 sections above were written on the earlier CSV export. Since then: S2 was regenerated as one product
+(`COPERNICUS/S2_SR_HARMONIZED`) and extended to 2021-11-16, the 0.08 floor was re-audited on it and holds (it removes 1 of 91
+observations, so S2 is effectively unfiltered); L8 was re-extracted from Collection 2 with a QA mask (the C01 collection no
+longer exists), which makes it pass the eligibility rules (42 dates, coverage 0.77), and it is now excluded by decision because
+its winter coverage does not reach the seasonal peak. Numbers quoted above for S2 (45 dates, 0.65) and L8 (51 dates, floors,
+32 / 0.58) describe the old export. See `s2-extension.md`, `gee-extraction.md` and `satellite-data-products.md`.

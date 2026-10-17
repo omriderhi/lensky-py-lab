@@ -136,6 +136,14 @@ NOTEBOOK_CONFIGS: dict = {
     "NSRS_3_B": {"min": 0.2,    "max": False,  "outlier_window": 7,   "images_per_month": 30},
 }
 
+# Satellites left out of the analysis by decision, whatever the eligibility rules say (default of --exclude;
+# pass --exclude with no names to apply the rules alone). Excluded sources stay in the data-availability chart.
+MANUAL_EXCLUSIONS: dict = {
+    "L8": "Landsat-8 (C02, 70 dates) passes the date/month rules but the < 10 % cloud filter leaves almost no winter "
+          "scenes, so its curve misses the NSRS peak season (PoS markers are not seasonal peaks). "
+          "See docs/features/gee-extraction.md.",
+}
+
 # Satellites that get a publication-style figure against NSRS (with IMS rainfall/temperature)
 PUBLICATION_SATELLITES = ("MODIS", "S2")
 
@@ -272,6 +280,8 @@ def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = 
 
     elig = evaluate_eligibility(sat_sources, nsrs_sources)
     elig["excluded_manually"] = elig["source"].isin(exclude)
+    for name in elig.loc[elig["excluded_manually"], "source"]:
+        print(f"  {name} excluded by decision: {MANUAL_EXCLUSIONS.get(name, 'set with --exclude')}")
     elig["in_analysis"] = (elig["eligible"] | (eligibility == "report")) & ~elig["excluded_manually"]
     elig.to_csv(out_dir / "source_eligibility.csv", index=False)
     print(elig.to_string(index=False))
@@ -725,9 +735,12 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument(
         "--exclude",
         nargs="*",
-        default=[],
+        default=list(MANUAL_EXCLUSIONS),
         metavar="SOURCE",
-        help="Satellite sources to leave out of the analysis regardless of the rules (e.g. L8).",
+        help=(
+            "Satellite sources to leave out of the analysis regardless of the rules. Default: "
+            f"{' '.join(MANUAL_EXCLUSIONS)} (see MANUAL_EXCLUSIONS); pass --exclude alone to apply only the rules."
+        ),
     )
     p.add_argument(
         "--extract",
