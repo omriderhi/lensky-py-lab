@@ -30,9 +30,12 @@ Marker colours used throughout this project:
   - PoS (Peak of Season):  maximum NDVI, typically January — vermillion #D55E00
   - EoS (End of Season):   dry-season senescence, typically March–April — sky blue #56B4E9
 
-The Helman (2015) method decomposes NDVI into:
-  - Woody component   = mean NDVI during June–August (dry season)
-  - Herbaceous component = NDVI minus woody baseline
+The Helman (2015) method decomposes NDVI, per seasonal year (Sep–Aug), into:
+  - Woody component NDVI_W = mean NDVI during June–August (dry season), or the
+    wet-season minimum if that is lower (abrupt-loss rule)
+  - Herbaceous / seasonal component NDVI_Seas = NDVI minus NDVI_W; its yearly
+    maximum is NDVI_H
+The marker extraction above does not depend on the decomposition.
 
 References
 ----------
@@ -148,22 +151,105 @@ def extract_phenology(
     return out
 
 
+def helman_annual_table(
+    series: pd.Series,
+    woody_months: Tuple[int, ...] = (6, 7, 8),
+    min_dry_obs: int = 2,
+    wet_months: Tuple[int, ...] = (10, 11, 12, 1, 2, 3, 4),
+) -> pd.DataFrame:
+    """Per-seasonal-year NDVI_W and NDVI_H, after Helman et al. (2015) Sec. 2.3.
+
+    A seasonal year Y runs September (Y-1) through August Y.
+
+    1. ``NDVI_W`` = mean NDVI over the dry season (*woody_months*, default
+       Jun–Aug) of that seasonal year. If the minimum of the wet-season
+       values (*wet_months*, default Oct–Apr as in the paper) is lower than
+       that mean, the minimum is used instead, so an abrupt loss mid-year
+       (fire, clearing) is not hidden. September and May are in neither set,
+       so the dry-season tail does not trigger the rule.
+    2. ``NDVI_Seas`` = NDVI − NDVI_W (computed by :func:`decompose_woody_herbaceous`).
+    3. ``NDVI_H`` = maximum ``NDVI_Seas`` of the seasonal year.
+
+    Parameters
+    ----------
+    series : pd.Series
+        NDVI indexed by unix timestamp (seconds).
+    woody_months : tuple of int
+        Calendar months forming the dry season.
+    min_dry_obs : int
+        Seasonal years with fewer dry-season observations are left out
+        (no NDVI_W is reported for them).
+    wet_months : tuple of int
+        Calendar months searched for the minimum in the abrupt-loss rule.
+
+    Returns
+    -------
+    pd.DataFrame
+        Indexed by seasonal year; columns ``NDVI_W``, ``NDVI_H``,
+        ``used_min_fallback`` (bool), ``n_dry_obs``. Empty if no seasonal
+        year qualifies.
+    """
+    clean = series.dropna()
+    times = pd.to_datetime(clean.index, unit="s")
+    frame = pd.DataFrame({
+        "sy": (times.year + (times.month >= 9).astype(int)).to_numpy(),
+        "v": clean.to_numpy(dtype=float),
+        "dry": np.asarray(times.month.isin(woody_months)),
+        "wet": np.asarray(times.month.isin(wet_months)),
+    })
+
+    rows = []
+    for sy, grp in frame.groupby("sy"):
+        dry = grp.loc[grp["dry"], "v"]
+        if len(dry) < max(min_dry_obs, 1):
+            continue
+        ndvi_w = float(dry.mean())
+        wet = grp.loc[grp["wet"], "v"]
+        fallback = bool(len(wet) and wet.min() < ndvi_w)
+        if fallback:
+            ndvi_w = float(wet.min())
+        rows.append({
+            "seasonal_year": int(sy),
+            "NDVI_W": ndvi_w,
+            "NDVI_H": float((grp["v"] - ndvi_w).max()),
+            "used_min_fallback": fallback,
+            "n_dry_obs": int(len(dry)),
+        })
+
+    cols = ["NDVI_W", "NDVI_H", "used_min_fallback", "n_dry_obs"]
+    if not rows:
+        return pd.DataFrame(columns=cols, index=pd.Index([], name="seasonal_year"))
+    return pd.DataFrame(rows).set_index("seasonal_year")[cols]
+
+
 def decompose_woody_herbaceous(
     series: pd.Series,
     woody_months: Tuple[int, ...] = (6, 7, 8),
     min_dry_seasons: int = 2,
+    min_dry_obs: int = 2,
+    method: str = "helman2015",
+    wet_months: Tuple[int, ...] = (10, 11, 12, 1, 2, 3, 4),
 ) -> Tuple[Optional[pd.Series], Optional[pd.Series]]:
     """Decompose NDVI time series into woody and herbaceous components.
 
-    Implements the Helman (2015) three-step method:
+    ``method="helman2015"`` (default) follows Helman et al. (2015) Sec. 2.3,
+    per seasonal year (Sep–Aug):
 
-    1. Average NDVI during the dry season (June–August) for each year
-       represents the **woody baseline** (herbaceous vegetation is
-       dormant in summer).
-    2. A linear regression through the annual dry-season averages produces
-       a smooth woody trend across the study period.
-    3. Subtracting the woody trend from the full time series yields the
-       **herbaceous component**.
+    1. Woody NDVI (``NDVI_W``) is the mean NDVI over the dry season
+       (June–August), when herbaceous vegetation is dormant. If the
+       wet-season (October–April) minimum is lower than that mean, the
+       minimum is used.
+    2. The herbaceous / seasonal component (``NDVI_Seas``) is NDVI − NDVI_W.
+
+    The woody series is therefore a step function that changes each
+    1 September. A seasonal year with fewer than *min_dry_obs* dry-season
+    observations (e.g. a record that ends in December) gets NaN for both
+    components; nothing is extrapolated. The per-year peak ``NDVI_H`` is
+    available from :func:`helman_annual_table`.
+
+    ``method="linear_trend"`` is the earlier repo behaviour, kept only to
+    reproduce older results: a linear regression through the calendar-year
+    dry-season means. It is not part of Helman (2015).
 
     Parameters
     ----------
@@ -175,25 +261,24 @@ def decompose_woody_herbaceous(
         Calendar months considered dry season. Defaults to ``(6, 7, 8)``
         (June, July, August) for Mediterranean sites.
     min_dry_seasons : int
-        Minimum number of dry-season annual means required to fit a
-        meaningful woody trend. Defaults to ``2``. If fewer are available
-        the decomposition is scientifically unreliable and ``(None, None)``
-        is returned.
+        ``linear_trend`` only: minimum number of annual dry-season means
+        needed to fit the trend.
+    min_dry_obs : int
+        ``helman2015`` only: minimum dry-season observations a seasonal year
+        needs to get a woody value. Judgment call (sparse sources such as S2
+        have few dates in a summer).
+    method : {"helman2015", "linear_trend"}
+    wet_months : tuple of int
+        ``helman2015`` only: months searched for the abrupt-loss minimum
+        (Oct–Apr in the paper).
 
     Returns
     -------
     woody_series : pd.Series or None
-        Smooth woody baseline, same index as *series*.
-        ``None`` if fewer than *min_dry_seasons* dry seasons are covered.
+        Woody baseline, same index as *series* (NaN where the seasonal year
+        has no qualifying dry season). ``None`` if no seasonal year qualifies.
     herbaceous_series : pd.Series or None
-        Herbaceous component (series − woody), same index.
-        ``None`` if fewer than *min_dry_seasons* dry seasons are covered.
-
-    Notes
-    -----
-    Follows Helman et al. (2015). The linear regression through annual
-    summer minima is consistent with the thesis implementation using three
-    consecutive summer minima (2019, 2020, 2021).
+        Herbaceous component (series − woody), same index; ``None`` as above.
 
     Examples
     --------
@@ -201,6 +286,34 @@ def decompose_woody_herbaceous(
     >>> if woody is None:
     ...     print("Insufficient dry seasons — decomposition skipped")
     """
+    if method == "linear_trend":
+        return _decompose_linear_trend(series, woody_months, min_dry_seasons)
+    if method != "helman2015":
+        raise ValueError(f"unknown method {method!r}; use 'helman2015' or 'linear_trend'")
+
+    table = helman_annual_table(series, woody_months, min_dry_obs, wet_months)
+    if table.empty:
+        warnings.warn(
+            f"decompose_woody_herbaceous: '{series.name}' has no seasonal year with "
+            f">= {min_dry_obs} dry-season observations (months {woody_months}) — "
+            "skipping decomposition."
+        )
+        return None, None
+
+    times = pd.to_datetime(series.index, unit="s")
+    sy = pd.Series(times.year + (times.month >= 9).astype(int), index=series.index)
+    woody_series = sy.map(table["NDVI_W"]).astype(float)
+    woody_series.name = f"{series.name}_woody"
+    herbaceous_series = (series - woody_series).rename(f"{series.name}_herbaceous")
+    return woody_series, herbaceous_series
+
+
+def _decompose_linear_trend(
+    series: pd.Series,
+    woody_months: Tuple[int, ...],
+    min_dry_seasons: int,
+) -> Tuple[Optional[pd.Series], Optional[pd.Series]]:
+    """Earlier repo method: linear trend through calendar-year dry-season means."""
     times = pd.to_datetime(series.index, unit="s")
     df = pd.DataFrame({"ndvi": series.values}, index=times)
 

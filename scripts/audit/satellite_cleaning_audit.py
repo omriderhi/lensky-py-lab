@@ -147,7 +147,7 @@ def evaluate(sat, c, df):
     col = f"{NDVI_LOWESS_FIELD} {sat}"
     pheno = extract_phenology(sdf, source_columns=[col], site_name="RH")
     t4 = pd.DataFrame()
-    w, h = decompose_woody_herbaceous(sdf[col].dropna(), min_dry_seasons=2)
+    w, h = decompose_woody_herbaceous(sdf[col].dropna())
     if w is not None:
         dec = pd.DataFrame({"woody": w, "herbaceous": h}).reset_index()
         dec.columns = ["TS", "woody", "herbaceous"]

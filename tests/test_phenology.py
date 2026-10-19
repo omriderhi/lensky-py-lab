@@ -22,6 +22,7 @@ import pytest
 from lensky_py_lab.phenology.phenolopy_integration import (
     decompose_woody_herbaceous,
     extract_phenology,
+    helman_annual_table,
 )
 
 
@@ -76,47 +77,119 @@ def site_df(mediterranean_ndvi: pd.Series) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 
+def _ts(dates) -> np.ndarray:
+    return (pd.DatetimeIndex(dates).astype(np.int64) // 10 ** 9).to_numpy()
+
+
+def _two_season_series(fire_value=None) -> pd.Series:
+    """Biweekly NDVI, Sep 2019 → Aug 2021 (seasonal years 2020 and 2021).
+
+    Summer 2020 plateau 0.30, summer 2021 plateau 0.40; winter bump on top.
+    ``fire_value``: if given, NDVI drops to it from 15 Dec 2020 until June 2021
+    (an abrupt loss during the wet season of seasonal year 2021).
+    """
+    dates = pd.date_range("2019-09-01", "2021-08-31", freq="14D")
+    vals = []
+    for d in dates:
+        base = 0.30 if d < pd.Timestamp("2020-09-01") else 0.40
+        bump = 0.4 if d.month in (12, 1, 2, 3) else 0.0
+        v = base + bump
+        if fire_value is not None and pd.Timestamp("2020-12-15") <= d < pd.Timestamp("2021-06-01"):
+            v = fire_value
+        vals.append(v)
+    return pd.Series(vals, index=_ts(dates), name="NDVI lowess MODIS")
+
+
 class TestDecomposeWoodyHerbaceous:
     def test_returns_two_series(self, mediterranean_ndvi):
         woody, herbaceous = decompose_woody_herbaceous(mediterranean_ndvi)
         assert isinstance(woody, pd.Series)
         assert isinstance(herbaceous, pd.Series)
 
-    def test_woody_is_constant_or_slowly_varying(self, mediterranean_ndvi):
-        woody, _ = decompose_woody_herbaceous(mediterranean_ndvi)
-        # The woody component should be lower than the growing-season NDVI
-        # and near the dry-season minimum (~0.25)
-        assert woody.mean() < mediterranean_ndvi.mean()
+    def test_woody_is_dry_season_mean_per_seasonal_year(self):
+        s = _two_season_series()
+        woody, herb = decompose_woody_herbaceous(s)
+        dates = pd.to_datetime(s.index, unit="s")
+        sy = dates.year + (dates.month >= 9).astype(int)
+        assert np.allclose(woody[sy == 2020], 0.30)
+        assert np.allclose(woody[sy == 2021], 0.40)
+        assert np.allclose(herb, s - woody)
+
+    def test_woody_steps_on_1_september(self):
+        s = _two_season_series()
+        woody, _ = decompose_woody_herbaceous(s)
+        dates = pd.to_datetime(s.index, unit="s")
+        before = woody[(dates >= "2020-08-01") & (dates < "2020-09-01")].unique()
+        after = woody[(dates >= "2020-09-01") & (dates < "2020-10-01")].unique()
+        assert before.tolist() == [pytest.approx(0.30)]
+        assert after.tolist() == [pytest.approx(0.40)]
+
+    def test_sep_to_dec_use_following_summer(self):
+        s = _two_season_series()
+        woody, _ = decompose_woody_herbaceous(s)
+        dates = pd.to_datetime(s.index, unit="s")
+        autumn_2019 = woody[(dates >= "2019-09-01") & (dates < "2020-01-01")]
+        assert np.allclose(autumn_2019, 0.30)  # summer 2020, not 2019
+
+    def test_min_fallback_on_wet_season_loss(self):
+        s = _two_season_series(fire_value=0.05)
+        woody, _ = decompose_woody_herbaceous(s)
+        dates = pd.to_datetime(s.index, unit="s")
+        sy = dates.year + (dates.month >= 9).astype(int)
+        assert np.allclose(woody[sy == 2021], 0.05)
+        assert np.allclose(woody[sy == 2020], 0.30)  # unaffected year
+        table = helman_annual_table(s)
+        assert bool(table.loc[2021, "used_min_fallback"])
+        assert not bool(table.loc[2020, "used_min_fallback"])
+
+    def test_season_without_dry_season_is_nan(self):
+        s = _two_season_series()
+        dates = pd.to_datetime(s.index, unit="s")
+        extra = pd.date_range("2021-09-01", "2021-12-31", freq="14D")
+        s = pd.concat([s, pd.Series(0.5, index=_ts(extra), name=s.name)])
+        woody, herb = decompose_woody_herbaceous(s)
+        late = pd.to_datetime(s.index, unit="s") >= "2021-09-01"
+        assert woody[late].isna().all() and herb[late].isna().all()
+        assert woody[~late].notna().all()
+
+    def test_annual_table_peak_is_seasonal_max(self):
+        s = _two_season_series()
+        table = helman_annual_table(s)
+        assert table.loc[2020, "NDVI_H"] == pytest.approx(0.4)
+        assert table.loc[2021, "NDVI_H"] == pytest.approx(0.4)
+        assert table.loc[2020, "NDVI_W"] == pytest.approx(0.30)
+        assert (table["n_dry_obs"] >= 2).all()
+
+    def test_returns_none_without_dry_season(self):
+        dates = pd.date_range("2020-10-01", "2021-03-01", freq="14D")
+        s = pd.Series(0.5, index=_ts(dates), name="x")
+        with pytest.warns(UserWarning):
+            assert decompose_woody_herbaceous(s) == (None, None)
 
     def test_herbaceous_peaks_in_winter(self, mediterranean_ndvi):
         _, herbaceous = decompose_woody_herbaceous(mediterranean_ndvi)
-        # Convert index to dates to find winter/summer months
         dates = pd.to_datetime(mediterranean_ndvi.index, unit="s")
         months = np.array(dates.month)
-        winter_mask = (months == 1) | (months == 2)
-        summer_mask = (months == 7) | (months == 8)
-        if winter_mask.any() and summer_mask.any():
-            winter_mean = herbaceous.values[winter_mask].mean()
-            summer_mean = herbaceous.values[summer_mask].mean()
-            assert winter_mean > summer_mean, (
-                f"Expected winter herbaceous ({winter_mean:.3f}) > summer ({summer_mean:.3f})"
-            )
-
-    def test_herbaceous_non_negative_in_growing_season(self, mediterranean_ndvi):
-        _, herbaceous = decompose_woody_herbaceous(mediterranean_ndvi)
-        dates = pd.to_datetime(mediterranean_ndvi.index, unit="s")
-        growing = herbaceous[(dates.month <= 4) | (dates.month >= 10)]
-        # Most growing-season values should be non-negative
-        pct_positive = (growing >= -0.01).mean()
-        assert pct_positive > 0.7
+        winter_mean = herbaceous.values[(months == 1) | (months == 2)]
+        summer_mean = herbaceous.values[(months == 7) | (months == 8)]
+        assert np.nanmean(winter_mean) > np.nanmean(summer_mean)
 
     def test_custom_woody_months(self, mediterranean_ndvi):
         woody_default, _ = decompose_woody_herbaceous(mediterranean_ndvi)
         woody_custom, _ = decompose_woody_herbaceous(
             mediterranean_ndvi, woody_months=(7, 8)
         )
-        # Different months → different woody baseline
         assert not woody_default.equals(woody_custom)
+
+    def test_legacy_linear_trend_still_available(self, mediterranean_ndvi):
+        woody, herb = decompose_woody_herbaceous(
+            mediterranean_ndvi, method="linear_trend"
+        )
+        assert woody.notna().all() and herb.notna().all()
+
+    def test_unknown_method_raises(self, mediterranean_ndvi):
+        with pytest.raises(ValueError):
+            decompose_woody_herbaceous(mediterranean_ndvi, method="nope")
 
 
 # ---------------------------------------------------------------------------
