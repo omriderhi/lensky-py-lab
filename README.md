@@ -185,15 +185,23 @@ for src, df in frames.items():
 ### Extract phenological markers
 
 ```python
-from lensky_py_lab.phenology import extract_phenology, decompose_woody_herbaceous
+from lensky_py_lab.phenology import (
+    extract_phenology, decompose_woody_herbaceous, helman_annual_table,
+)
 
 # SoS / PoS / EoS per satellite per hydrological year
 phenology_df = extract_phenology(site_df, site_name="RH",
                                   output_csv="data/results/phenology_markers.csv")
 
-# Helman (2015) woody/herbaceous decomposition
+# Helman (2015) woody/herbaceous decomposition, per seasonal year (Sep-Aug):
+# woody = Jun-Aug mean (or the Oct-Apr minimum if lower), herbaceous = NDVI - woody
 woody, herbaceous = decompose_woody_herbaceous(site_df["NDVI lowess MODIS"])
+annual = helman_annual_table(site_df["NDVI lowess MODIS"].dropna())  # NDVI_W, NDVI_H per year
 ```
+
+The woody series is a step function (one value per seasonal year); a season with no
+dry-season data gets NaN, nothing is extrapolated. `method="linear_trend"` reproduces the
+earlier repo behaviour (not part of Helman 2015). Details: `docs/features/helman-decomposition-alignment.md`.
 
 ### Generate publication figures
 

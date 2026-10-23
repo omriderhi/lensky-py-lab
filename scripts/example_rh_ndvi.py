@@ -105,9 +105,9 @@ sat_cols = [c for c in site_df.columns
             if c.startswith(f"{NDVI_LOWESS_FIELD} ") and "NSRS" not in c]
 for sat_col in sat_cols:
     sat_name = sat_col.removeprefix(f"{NDVI_LOWESS_FIELD} ")
-    woody, herb = decompose_woody_herbaceous(site_df[sat_col].dropna(), min_dry_seasons=2)
+    woody, herb = decompose_woody_herbaceous(site_df[sat_col].dropna())
     if woody is None:
-        print(f"Decomposition skipped for {sat_name} — insufficient dry seasons")
+        print(f"Decomposition skipped for {sat_name} — no seasonal year with a dry season")
         continue
     fig_d = plot_decomposition_comparative(
         "Ramat Hanadiv", site_df, sat_name, woody, herb, output_dir=out_decomp

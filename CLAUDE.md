@@ -71,7 +71,7 @@ src/lensky_py_lab/
 ├── io/
 │   └── csv_loader.py     # load_source_csv, load_ims_csvs, discover_ims_csvs_for_site
 ├── phenology/
-│   └── phenolopy_integration.py  # extract_phenology, decompose_woody_herbaceous
+│   └── phenolopy_integration.py  # extract_phenology, decompose_woody_herbaceous, helman_annual_table
 ├── sensors/
 │   ├── nsrs_calibration.py       # NSRS_3 data-derived calibration, 4-panel figure
 │   └── daily_graphs.py           # load_dat_dir/file, intra-day NDVI figures
@@ -130,6 +130,10 @@ Extracted by `extract_phenology()` using a **native scipy/Savitzky-Golay seasona
 - **EoS** (End of Season) — dry-season senescence, typically March–May; colour: `#56B4E9` (sky blue)
 
 Markers are rendered as colored scatter points (▲ SoS, ● PoS, ▼ EoS) on comparative plots (NSRS vs satellite). They are **not** drawn on the main time-series figure.
+
+## Woody / herbaceous decomposition
+
+`decompose_woody_herbaceous()` follows Helman et al. (2015) Sec. 2.3 per **seasonal year** (Sep–Aug): NDVI_W = mean of Jun–Aug, or the Oct–Apr minimum when that is lower (abrupt-loss rule); herbaceous (NDVI_Seas) = NDVI − NDVI_W; `helman_annual_table()` adds NDVI_H (yearly max of NDVI_Seas). The woody series is a step function; seasons with < `min_dry_obs` (2) dry-season dates get NaN, never an extrapolation. `method="linear_trend"` is the earlier regression through annual means (not in the paper), kept only to reproduce old numbers. `extract_phenology()` does not use the decomposition. Before/after numbers: `docs/features/helman-decomposition-alignment.md`.
 
 ## NSRS_3 calibration
 

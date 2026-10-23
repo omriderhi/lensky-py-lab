@@ -89,6 +89,7 @@ from lensky_py_lab.io.csv_loader import discover_ims_csvs_for_site, load_ims_csv
 from lensky_py_lab.phenology.phenolopy_integration import (
     decompose_woody_herbaceous,
     extract_phenology,
+    helman_annual_table,
 )
 from lensky_py_lab.io.gee_extract import parse_sources
 from lensky_py_lab.pipeline.eligibility import evaluate_eligibility, reference_window
@@ -450,17 +451,20 @@ def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = 
     for sat_col in sat_lowess_for_decomp:
         sat_name = sat_col.removeprefix(f"{NDVI_LOWESS_FIELD} ")
         series = site_df[sat_col].dropna()
-        woody, herbaceous = decompose_woody_herbaceous(series, min_dry_seasons=2)
+        woody, herbaceous = decompose_woody_herbaceous(series)
 
         if woody is None:
             # warning already printed by decompose_woody_herbaceous
-            print(f"  [{sat_name}] skipped — insufficient dry seasons")
+            print(f"  [{sat_name}] skipped — no seasonal year with a dry season")
             continue
 
-        # Save CSV
+        # Save CSVs (time series + per-seasonal-year NDVI_W / NDVI_H)
         decomp_csv = out_dir / f"RH_NDVI_{sat_name}_decomposition.csv"
         pd.DataFrame({"woody": woody, "herbaceous": herbaceous}).to_csv(decomp_csv)
         print(f"  [{sat_name}] → {decomp_csv.name}")
+        annual_csv = out_dir / f"RH_NDVI_{sat_name}_helman_annual.csv"
+        helman_annual_table(series).to_csv(annual_csv)
+        print(f"  [{sat_name}] → {annual_csv.name}")
 
         # Generate 3-panel comparative figure vs NSRS sensors
         fig_decomp = plot_decomposition_comparative(
