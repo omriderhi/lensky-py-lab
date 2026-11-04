@@ -193,15 +193,26 @@ from lensky_py_lab.phenology import (
 phenology_df = extract_phenology(site_df, site_name="RH",
                                   output_csv="data/results/phenology_markers.csv")
 
-# Helman (2015) woody/herbaceous decomposition, per seasonal year (Sep-Aug):
-# woody = Jun-Aug mean (or the Oct-Apr minimum if lower), herbaceous = NDVI - woody
+# Woody/herbaceous decomposition after Helman et al. (2015), per seasonal year (Sep-Aug):
+# NDVI_W = Jun-Aug mean; woody series = NDVI_W interpolated linearly between dry seasons
+# (anchored at 16 July); herbaceous = NDVI - woody series
 woody, herbaceous = decompose_woody_herbaceous(site_df["NDVI lowess MODIS"])
-annual = helman_annual_table(site_df["NDVI lowess MODIS"].dropna())  # NDVI_W, NDVI_H per year
+annual = helman_annual_table(site_df["NDVI lowess MODIS"].dropna())  # NDVI_W, NDVI_H + diagnostics
 ```
 
-The woody series is a step function (one value per seasonal year); a season with no
-dry-season data gets NaN, nothing is extrapolated. `method="linear_trend"` reproduces the
-earlier repo behaviour (not part of Helman 2015). Details: `docs/features/helman-decomposition-alignment.md`.
+NDVI_W is the June–August mean of each seasonal year. The woody series places each NDVI_W at
+16 July and interpolates linearly between successive dry seasons, so it changes gradually instead
+of jumping on 1 September (a slowly varying woody level, as assumed by Lu et al. 2003). Before
+the first and after the last dry season it is held at the nearest NDVI_W, but only inside seasonal
+years that have one; dates outside that span get NaN, nothing is extrapolated.
+
+Helman et al. (2015)'s two other behaviours are options, both off by default:
+`woody_interp="step"` (`--woody-interp step`) holds NDVI_W constant through its seasonal year, and
+`wet_min_rule=True` (`--wet-min-rule`) replaces NDVI_W with the October–April minimum when that is
+lower (abrupt-loss rule). `--woody-interp step --wet-min-rule` reproduces the v19 run.
+`helman_annual_table()` always reports where the rule would have fired (`dry_mean`, `wet_min`,
+`wet_min_date`, `wet_min_below_mean`). `method="linear_trend"` reproduces the earlier repo
+behaviour (not part of Helman 2015). Details: `docs/features/helman-decomposition-alignment.md`.
 
 ### Generate publication figures
 

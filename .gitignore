@@ -217,6 +217,7 @@ data/results/**
 
 # Regenerated / review-check output directories (e.g. results_regen_2026-10-15)
 data/results_*/
+data/*_run/
 
 # Archive files (thesis document, large notebooks)
 archive/*.docx
