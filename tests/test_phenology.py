@@ -108,7 +108,7 @@ class TestDecomposeWoodyHerbaceous:
 
     def test_woody_is_dry_season_mean_per_seasonal_year(self):
         s = _two_season_series()
-        woody, herb = decompose_woody_herbaceous(s)
+        woody, herb = decompose_woody_herbaceous(s, woody_interp="step")
         dates = pd.to_datetime(s.index, unit="s")
         sy = dates.year + (dates.month >= 9).astype(int)
         assert np.allclose(woody[sy == 2020], 0.30)
@@ -117,7 +117,7 @@ class TestDecomposeWoodyHerbaceous:
 
     def test_woody_steps_on_1_september(self):
         s = _two_season_series()
-        woody, _ = decompose_woody_herbaceous(s)
+        woody, _ = decompose_woody_herbaceous(s, woody_interp="step")
         dates = pd.to_datetime(s.index, unit="s")
         before = woody[(dates >= "2020-08-01") & (dates < "2020-09-01")].unique()
         after = woody[(dates >= "2020-09-01") & (dates < "2020-10-01")].unique()
@@ -131,14 +131,24 @@ class TestDecomposeWoodyHerbaceous:
         autumn_2019 = woody[(dates >= "2019-09-01") & (dates < "2020-01-01")]
         assert np.allclose(autumn_2019, 0.30)  # summer 2020, not 2019
 
-    def test_min_fallback_on_wet_season_loss(self):
+    def test_min_rule_off_by_default(self):
         s = _two_season_series(fire_value=0.05)
-        woody, _ = decompose_woody_herbaceous(s)
+        table = helman_annual_table(s)
+        assert table.loc[2021, "NDVI_W"] == pytest.approx(0.40)  # Jun–Aug mean, loss ignored
+        assert bool(table.loc[2021, "wet_min_below_mean"])
+        assert not bool(table.loc[2021, "used_min_fallback"])
+        assert table.loc[2021, "wet_min"] == pytest.approx(0.05)
+        assert table.loc[2021, "dry_mean"] == pytest.approx(0.40)
+
+    def test_min_fallback_on_wet_season_loss(self):
+        # Helman et al. (2015) as published: steps + abrupt-loss rule (reproduces v19)
+        s = _two_season_series(fire_value=0.05)
+        woody, _ = decompose_woody_herbaceous(s, wet_min_rule=True, woody_interp="step")
         dates = pd.to_datetime(s.index, unit="s")
         sy = dates.year + (dates.month >= 9).astype(int)
         assert np.allclose(woody[sy == 2021], 0.05)
         assert np.allclose(woody[sy == 2020], 0.30)  # unaffected year
-        table = helman_annual_table(s)
+        table = helman_annual_table(s, wet_min_rule=True, woody_interp="step")
         assert bool(table.loc[2021, "used_min_fallback"])
         assert not bool(table.loc[2020, "used_min_fallback"])
 
@@ -154,11 +164,56 @@ class TestDecomposeWoodyHerbaceous:
 
     def test_annual_table_peak_is_seasonal_max(self):
         s = _two_season_series()
-        table = helman_annual_table(s)
+        table = helman_annual_table(s, woody_interp="step")
         assert table.loc[2020, "NDVI_H"] == pytest.approx(0.4)
         assert table.loc[2021, "NDVI_H"] == pytest.approx(0.4)
         assert table.loc[2020, "NDVI_W"] == pytest.approx(0.30)
         assert (table["n_dry_obs"] >= 2).all()
+
+    @staticmethod
+    def _expected_linear(s):
+        a0 = pd.Timestamp("2020-07-16").value // 10 ** 9
+        a1 = pd.Timestamp("2021-07-16").value // 10 ** 9
+        return np.interp(np.asarray(s.index, dtype=float), [a0, a1], [0.30, 0.40])
+
+    def test_linear_woody_interpolates_between_dry_seasons(self):
+        s = _two_season_series()
+        woody, herb = decompose_woody_herbaceous(s)  # default woody_interp="linear"
+        assert np.allclose(woody, self._expected_linear(s))
+        assert np.allclose(herb, s - woody)
+        dates = pd.to_datetime(s.index, unit="s")
+        assert np.allclose(woody[dates < "2020-07-16"], 0.30)   # flat before the first anchor
+        assert np.allclose(woody[dates >= "2021-07-16"], 0.40)  # flat after the last anchor
+
+    def test_linear_woody_has_no_jump_on_1_september(self):
+        s = _two_season_series()
+        woody, _ = decompose_woody_herbaceous(s)
+        # biweekly dates: the largest change between neighbours is one 14-day slope step
+        assert np.nanmax(np.abs(np.diff(woody.to_numpy()))) < 0.10 * 15 / 365
+
+    def test_linear_woody_nan_outside_seasonal_years(self):
+        s = _two_season_series()
+        extra = pd.date_range("2021-09-01", "2021-12-31", freq="14D")
+        s = pd.concat([s, pd.Series(0.5, index=_ts(extra), name=s.name)])
+        woody, herb = decompose_woody_herbaceous(s)
+        late = pd.to_datetime(s.index, unit="s") >= "2021-09-01"
+        assert woody[late].isna().all() and herb[late].isna().all()
+        assert woody[~late].notna().all()
+
+    def test_annual_table_peak_uses_interpolated_woody(self):
+        s = _two_season_series()
+        table = helman_annual_table(s)
+        seas = s.to_numpy() - self._expected_linear(s)
+        dates = pd.to_datetime(s.index, unit="s")
+        sy = dates.year + (dates.month >= 9).astype(int)
+        for y in (2020, 2021):
+            assert table.loc[y, "NDVI_H"] == pytest.approx(seas[sy == y].max())
+        assert table.loc[2020, "NDVI_W"] == pytest.approx(0.30)
+        assert table.loc[2021, "NDVI_W"] == pytest.approx(0.40)
+
+    def test_unknown_woody_interp_raises(self):
+        with pytest.raises(ValueError):
+            decompose_woody_herbaceous(_two_season_series(), woody_interp="spline")
 
     def test_returns_none_without_dry_season(self):
         dates = pd.date_range("2020-10-01", "2021-03-01", freq="14D")
