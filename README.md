@@ -186,33 +186,29 @@ for src, df in frames.items():
 
 ```python
 from lensky_py_lab.phenology import (
-    extract_phenology, decompose_woody_herbaceous, helman_annual_table,
+    extract_phenology, decompose_woody_herbaceous, seasonal_min_table,
 )
 
 # SoS / PoS / EoS per satellite per hydrological year
 phenology_df = extract_phenology(site_df, site_name="RH",
                                   output_csv="data/results/phenology_markers.csv")
 
-# Woody/herbaceous decomposition after Helman et al. (2015), per seasonal year (Sep-Aug):
-# NDVI_W = Jun-Aug mean; woody series = NDVI_W interpolated linearly between dry seasons
-# (anchored at 16 July); herbaceous = NDVI - woody series
+# Woody/herbaceous decomposition (v20 default): woody series = one straight line, least squares
+# through the minimum NDVI of every seasonal year (Sep-Aug, local dates); herbaceous = NDVI - woody
 woody, herbaceous = decompose_woody_herbaceous(site_df["NDVI lowess MODIS"])
-annual = helman_annual_table(site_df["NDVI lowess MODIS"].dropna())  # NDVI_W, NDVI_H + diagnostics
+minima = seasonal_min_table(site_df["NDVI lowess MODIS"].dropna())  # yearly minima, NDVI_H; fit in .attrs
 ```
 
-NDVI_W is the June–August mean of each seasonal year. The woody series places each NDVI_W at
-16 July and interpolates linearly between successive dry seasons, so it changes gradually instead
-of jumping on 1 September (a slowly varying woody level, as assumed by Lu et al. 2003). Before
-the first and after the last dry season it is held at the nearest NDVI_W, but only inside seasonal
-years that have one; dates outside that span get NaN, nothing is extrapolated.
-
-Helman et al. (2015)'s two other behaviours are options, both off by default:
-`woody_interp="step"` (`--woody-interp step`) holds NDVI_W constant through its seasonal year, and
-`wet_min_rule=True` (`--wet-min-rule`) replaces NDVI_W with the October–April minimum when that is
-lower (abrupt-loss rule). `--woody-interp step --wet-min-rule` reproduces the v19 run.
-`helman_annual_table()` always reports where the rule would have fired (`dry_mean`, `wet_min`,
-`wet_min_date`, `wet_min_below_mean`). `method="linear_trend"` reproduces the earlier repo
-behaviour (not part of Helman 2015). Details: `docs/features/helman-decomposition-alignment.md`.
+The woody series is a straight line: the least-squares fit through the minimum smoothed NDVI of
+every seasonal year (1 Sep–31 Aug, Asia/Jerusalem dates), each minimum at its own date, all years of
+the record including the partial years at both ends. It has no steps and a value on every date;
+`NDVI_H` is the yearly maximum of NDVI minus the line. `seasonal_min_table()` returns the minima,
+the partial-year flags and the fit. Choose another method with `method=` /
+`run_rh_ndvi.py --decomposition`: `helman2015` (Jun–Aug mean per seasonal year, interpolated between
+dry seasons; options `woody_interp="step"` / `--woody-interp step` and `wet_min_rule=True` /
+`--wet-min-rule`, which together reproduce v19) or `linear_trend` (the earlier calendar-year Jun–Aug
+regression, not part of Helman 2015). Details: `docs/features/seasonal-minimum-trend.md`,
+`docs/features/helman-decomposition-alignment.md`.
 
 ### Generate publication figures
 

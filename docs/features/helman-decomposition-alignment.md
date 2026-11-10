@@ -1,6 +1,10 @@
 # Aligning the woody/herbaceous decomposition with Helman et al. (2015)
 
-## Update Nov 2026: no minimum rule, woody interpolated between dry seasons
+## v20 decision (10 Nov 2026): straight line through the yearly minima
+
+The default method is now `seasonal_min_trend`: one least-squares line through the minimum of every seasonal year (all years of the record, local dates), as the woody series. Method, outputs, how to reproduce the runs below, and the tables regenerated from `data/v20_run`: [`seasonal-minimum-trend.md`](seasonal-minimum-trend.md). Everything below describes the Helman-style method, now `--decomposition helman2015`; its tables are labelled with the run they came from.
+
+## Update Nov 2026 (4 Nov draft, superseded as default): no minimum rule, woody interpolated between dry seasons
 
 **Decision (Omri and his supervisor, 4 Nov 2026), used from manuscript v20:**
 
@@ -10,11 +14,11 @@
 
 **Why.** v19 (below) applied both, and the woody series looked like stairs. The rule fired in 4 of 5 MODIS seasonal years on the ordinary early-October low of an evergreen site, not on a fire or clearing. In 2019 the low of 0.393 (3 Oct 2018) replaced a June–August mean of 0.447, giving jumps of up to 0.05–0.06 every 1 September. Without the rule, the MODIS June–August means (seasonal years 2018–2022) are 0.457, 0.447, 0.455, 0.444 and 0.464; consecutive values differ by at most 0.020. Interpolation turns those differences into gradual slopes, a slowly varying woody level as assumed by Lu et al. (2003), and the herbaceous component (NDVI − woody) no longer jumps on 1 September either. Helman & Mussery (2020) used the June–August mean alone; they do not mention the rule.
 
-**Reproducing v19:** `python scripts/run_rh_ndvi.py <same inputs> --woody-interp step --wet-min-rule`. On the repo's `data/research_results` CSVs this reproduces the v19 decomposition and annual tables exactly.
+**Reproducing v19:** `python scripts/run_rh_ndvi.py <same inputs> --decomposition helman2015 --woody-interp step --wet-min-rule` (the interpolation draft: `--decomposition helman2015`). On the repo's `data/research_results` CSVs this reproduces the v19 decomposition exactly and the annual tables in the columns `data/helman_run` has.
 
 **Edges.** Before the first and after the last 16 July anchor the woody value is held at the nearest NDVI_W, but only inside seasonal years that have an NDVI_W; dates outside that span are NaN (S2 from 1 September 2021). A missing seasonal year between two others is bridged by the interpolation.
 
-Per seasonal year, v20 (`RH_NDVI_<sat>_helman_annual.csv`; NDVI_W = `dry_mean`, rule off):
+Per seasonal year, interpolation draft (`RH_NDVI_<sat>_helman_annual.csv`; NDVI_W = `dry_mean`, rule off). Computed in a cloud session, so its dates are one day later than a local run on Omri's machine (`data/results_interp_rerun`: MODIS wet-season minimum 2018-10-02, woody r 0.19, RMSE 0.145 instead of 2018-10-03, 0.18, 0.144); see `seasonal-minimum-trend.md`:
 
 | Source | Seasonal year | NDVI_W | NDVI_H | rule would fire | wet-season min (date) |
 |---|---|---|---|---|---|
@@ -29,7 +33,7 @@ Per seasonal year, v20 (`RH_NDVI_<sat>_helman_annual.csv`; NDVI_W = `dry_mean`, 
 
 S2 seasonal year 2022 has no dry-season dates and so no NDVI_W.
 
-Table 4, v19 → v20 (full-signal rows unchanged: MODIS n 371, MAE 0.042, RMSE 0.052, r 0.97, bias −0.018; S2 n 46, 0.039, 0.048, 0.96, +0.027):
+Table 4, v19 → interpolation draft, same cloud session (full-signal rows unchanged: MODIS n 371, MAE 0.042, RMSE 0.052, r 0.97, bias −0.018; S2 n 46, 0.039, 0.048, 0.96, +0.027):
 
 | Comparison | n | MAE | RMSE | r | bias |
 |---|---|---|---|---|---|
