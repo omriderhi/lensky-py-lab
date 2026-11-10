@@ -186,22 +186,29 @@ for src, df in frames.items():
 
 ```python
 from lensky_py_lab.phenology import (
-    extract_phenology, decompose_woody_herbaceous, helman_annual_table,
+    extract_phenology, decompose_woody_herbaceous, seasonal_min_table,
 )
 
 # SoS / PoS / EoS per satellite per hydrological year
 phenology_df = extract_phenology(site_df, site_name="RH",
                                   output_csv="data/results/phenology_markers.csv")
 
-# Helman (2015) woody/herbaceous decomposition, per seasonal year (Sep-Aug):
-# woody = Jun-Aug mean (or the Oct-Apr minimum if lower), herbaceous = NDVI - woody
+# Woody/herbaceous decomposition (v20 default): woody series = one straight line, least squares
+# through the minimum NDVI of every seasonal year (Sep-Aug, local dates); herbaceous = NDVI - woody
 woody, herbaceous = decompose_woody_herbaceous(site_df["NDVI lowess MODIS"])
-annual = helman_annual_table(site_df["NDVI lowess MODIS"].dropna())  # NDVI_W, NDVI_H per year
+minima = seasonal_min_table(site_df["NDVI lowess MODIS"].dropna())  # yearly minima, NDVI_H; fit in .attrs
 ```
 
-The woody series is a step function (one value per seasonal year); a season with no
-dry-season data gets NaN, nothing is extrapolated. `method="linear_trend"` reproduces the
-earlier repo behaviour (not part of Helman 2015). Details: `docs/features/helman-decomposition-alignment.md`.
+The woody series is a straight line: the least-squares fit through the minimum smoothed NDVI of
+every seasonal year (1 Sep–31 Aug, Asia/Jerusalem dates), each minimum at its own date, all years of
+the record including the partial years at both ends. It has no steps and a value on every date;
+`NDVI_H` is the yearly maximum of NDVI minus the line. `seasonal_min_table()` returns the minima,
+the partial-year flags and the fit. Choose another method with `method=` /
+`run_rh_ndvi.py --decomposition`: `helman2015` (Jun–Aug mean per seasonal year, interpolated between
+dry seasons; options `woody_interp="step"` / `--woody-interp step` and `wet_min_rule=True` /
+`--wet-min-rule`, which together reproduce v19) or `linear_trend` (the earlier calendar-year Jun–Aug
+regression, not part of Helman 2015). Details: `docs/features/seasonal-minimum-trend.md`,
+`docs/features/helman-decomposition-alignment.md`.
 
 ### Generate publication figures
 

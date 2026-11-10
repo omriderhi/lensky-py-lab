@@ -62,6 +62,7 @@ Pipeline (mirrors the original notebook exactly):
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 import warnings
@@ -90,6 +91,7 @@ from lensky_py_lab.phenology.phenolopy_integration import (
     decompose_woody_herbaceous,
     extract_phenology,
     helman_annual_table,
+    seasonal_min_table,
 )
 from lensky_py_lab.io.gee_extract import parse_sources
 from lensky_py_lab.pipeline.eligibility import evaluate_eligibility, reference_window
@@ -155,7 +157,9 @@ _NSRS_BASE_NAMES = {k for k in NOTEBOOK_CONFIGS if k.startswith("NSRS") and not 
 def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = None,
         nsrs3_factor: str = "auto", eligibility: str = "enforce",
         exclude: tuple = (), extract: tuple = (), gee_project: Optional[str] = None,
-        modis_collection: str = "006", force_extract: bool = False) -> None:
+        modis_collection: str = "006", force_extract: bool = False,
+        decomposition: str = "seasonal_min_trend",
+        wet_min_rule: bool = False, woody_interp: str = "linear") -> None:
     """``nsrs3_factor``: ``"auto"`` derives the NSRS_3 factor from the data,
     ``"none"`` leaves NSRS_3 uncalibrated, a number applies that fixed factor.
 
@@ -163,6 +167,9 @@ def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = 
     (``lensky_py_lab.pipeline.eligibility``) out of the analysis; ``"report"`` only writes
     the verdicts. ``exclude`` names sources to leave out regardless. Excluded sources are
     still processed and still shown in the data-availability chart.
+
+    ``decomposition``: woody/herbaceous method (``seasonal_min_trend`` default, ``helman2015``,
+    ``linear_trend``); ``wet_min_rule`` / ``woody_interp`` apply only to ``helman2015``.
 
     ``extract`` names satellite sources (MODIS, S2, L8) to re-extract from Google Earth Engine
     before the run: their CSVs in ``data_dir`` are overwritten (provenance goes to
@@ -451,20 +458,43 @@ def run(data_dir: Path, ims_dir: Path, out_dir: Path, dat_dir: Optional[Path] = 
     for sat_col in sat_lowess_for_decomp:
         sat_name = sat_col.removeprefix(f"{NDVI_LOWESS_FIELD} ")
         series = site_df[sat_col].dropna()
-        woody, herbaceous = decompose_woody_herbaceous(series)
+        if decomposition == "helman2015":
+            kw = dict(wet_min_rule=wet_min_rule, woody_interp=woody_interp)
+        else:
+            kw = {}
+        woody, herbaceous = decompose_woody_herbaceous(series, method=decomposition, **kw)
 
         if woody is None:
             # warning already printed by decompose_woody_herbaceous
-            print(f"  [{sat_name}] skipped — no seasonal year with a dry season")
+            print(f"  [{sat_name}] skipped — too few seasonal years / dry seasons")
             continue
 
-        # Save CSVs (time series + per-seasonal-year NDVI_W / NDVI_H)
         decomp_csv = out_dir / f"RH_NDVI_{sat_name}_decomposition.csv"
         pd.DataFrame({"woody": woody, "herbaceous": herbaceous}).to_csv(decomp_csv)
         print(f"  [{sat_name}] → {decomp_csv.name}")
-        annual_csv = out_dir / f"RH_NDVI_{sat_name}_helman_annual.csv"
-        helman_annual_table(series).to_csv(annual_csv)
-        print(f"  [{sat_name}] → {annual_csv.name}")
+
+        if decomposition == "seasonal_min_trend":
+            smin = seasonal_min_table(series)
+            smin_csv = out_dir / f"RH_NDVI_{sat_name}_seasonal_min.csv"
+            smin.to_csv(smin_csv)
+            trend_json = out_dir / f"RH_NDVI_{sat_name}_woody_trend.json"
+            trend_json.write_text(json.dumps(smin.attrs, indent=2), encoding="utf-8")
+            print(f"  [{sat_name}] → {smin_csv.name}, {trend_json.name}")
+            print(f"  [{sat_name}] woody series: linear regression through "
+                  f"{smin.attrs['n_points']} seasonal-year minima "
+                  f"(slope {smin.attrs['slope_per_year']:+.4f} per year)")
+        elif decomposition == "helman2015":
+            annual_csv = out_dir / f"RH_NDVI_{sat_name}_helman_annual.csv"
+            annual = helman_annual_table(series, wet_min_rule=wet_min_rule,
+                                         woody_interp=woody_interp)
+            annual.to_csv(annual_csv)
+            print(f"  [{sat_name}] → {annual_csv.name}")
+            would = annual.index[annual["wet_min_below_mean"].astype(bool)].tolist()
+            print(f"  [{sat_name}] woody series: {woody_interp}; wet-season minimum rule "
+                  f"{'ON' if wet_min_rule else 'off'} (wet-season min below the Jun–Aug mean "
+                  f"in seasonal years {would or 'none'})")
+        else:
+            print(f"  [{sat_name}] woody series: {decomposition} (earlier repo method)")
 
         # Generate 3-panel comparative figure vs NSRS sensors
         fig_decomp = plot_decomposition_comparative(
@@ -754,7 +784,36 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Overwrite a CSV even if the new extraction has far fewer dates than the existing file.",
     )
-    return p.parse_args()
+    p.add_argument(
+        "--decomposition",
+        default="seasonal_min_trend",
+        choices=["seasonal_min_trend", "helman2015", "linear_trend"],
+        help=("Woody/herbaceous method. 'seasonal_min_trend' (default, v20): one straight woody "
+              "line, least-squares through the minimum of every seasonal year (Sep-Aug, local "
+              "dates, edge years included). 'helman2015': Jun-Aug mean per seasonal year; "
+              "'--decomposition helman2015' reproduces the interpolation run, and "
+              "'--decomposition helman2015 --woody-interp step --wet-min-rule' reproduces v19. "
+              "'linear_trend': the earlier calendar-year Jun-Aug regression (v12)."),
+    )
+    p.add_argument(
+        "--wet-min-rule",
+        action="store_true",
+        help=("helman2015 only: apply Helman et al. (2015)'s abrupt-loss rule (woody NDVI = Oct–Apr "
+              "minimum when lower than the Jun–Aug mean). Off by default."),
+    )
+    p.add_argument(
+        "--woody-interp",
+        default=None,
+        choices=["linear", "step"],
+        help=("helman2015 only: 'linear' (default) interpolates the yearly Jun–Aug means, anchored "
+              "at 16 July; 'step' holds each value constant through its seasonal year "
+              "(Helman 2015)."),
+    )
+    args = p.parse_args()
+    if args.decomposition != "helman2015" and (args.wet_min_rule or args.woody_interp):
+        p.error("--wet-min-rule and --woody-interp apply only with --decomposition helman2015")
+    args.woody_interp = args.woody_interp or "linear"
+    return args
 
 
 if __name__ == "__main__":
@@ -771,4 +830,7 @@ if __name__ == "__main__":
         gee_project=args.gee_project,
         modis_collection=args.modis_collection,
         force_extract=args.force_extract,
+        decomposition=args.decomposition,
+        wet_min_rule=args.wet_min_rule,
+        woody_interp=args.woody_interp,
     )
