@@ -295,19 +295,150 @@ def helman_annual_table(
     return table[cols]
 
 
+def seasonal_min_table(
+    series: pd.Series,
+    min_obs: int = 1,
+    tz: str = "Asia/Jerusalem",
+) -> pd.DataFrame:
+    """Yearly minima of the smoothed NDVI and the one regression line through them.
+
+    Used by ``decompose_woody_herbaceous(method="seasonal_min_trend")``.
+
+    1. A seasonal year Y runs 1 September (Y-1) through 31 August Y, in *local*
+       calendar dates (*tz*): ``TS`` is local midnight stored as 21:00/22:00 UTC of
+       the previous day, so UTC dates would put 1 September in the wrong year.
+    2. Every seasonal year with at least *min_obs* observations (the partial years
+       at both ends of the record included) gives one point: the minimum NDVI
+       (``ndvi_min``, first one if tied) at its own date (``ndvi_min_date``).
+    3. One ordinary least-squares line ``NDVI = a + b * t`` (t in unix seconds) is
+       fitted through all those points. Each minimum sits at its own date.
+    4. The woody series is that line evaluated at every date; the herbaceous
+       component is NDVI minus the line; ``NDVI_H`` is its maximum per seasonal year.
+
+    Returns
+    -------
+    pd.DataFrame
+        Indexed by seasonal year; columns ``n_obs``, ``first_date``, ``last_date``
+        (local, ``YYYY-MM-DD``), ``partial``, ``ndvi_min``, ``ndvi_min_date``,
+        ``woody_at_min``, ``NDVI_H``. ``partial`` is True only for the first
+        (last) seasonal year of the record when the record starts more than 30
+        days after its 1 September (ends more than 30 days before its 31 August).
+        The fit is in ``df.attrs``: ``a``, ``b`` (per second), ``slope_per_year``,
+        ``n_points``, ``tz`` and the line value and date at the first and last
+        date of the series (``woody_first_date`` / ``_value``, ``woody_last_*``).
+        With fewer than 2 seasonal years, ``a`` and ``b`` are None and
+        ``woody_at_min`` / ``NDVI_H`` are NaN.
+    """
+    cols = ["n_obs", "first_date", "last_date", "partial", "ndvi_min",
+            "ndvi_min_date", "woody_at_min", "NDVI_H"]
+    clean = series.dropna().sort_index()
+    out = pd.DataFrame(columns=cols, index=pd.Index([], name="seasonal_year"))
+    out.attrs.update(a=None, b=None, slope_per_year=None, n_points=0, tz=tz)
+    if clean.empty:
+        return out
+
+    local = pd.to_datetime(clean.index, unit="s", utc=True).tz_convert(tz)
+    t = np.asarray(clean.index, dtype=float)
+    v = clean.to_numpy(dtype=float)
+    sy = np.asarray(local.year + (local.month >= 9).astype(int))
+
+    rows, t_min, v_min = [], [], []
+    for y in np.unique(sy):
+        idx = np.flatnonzero(sy == y)
+        if len(idx) < max(min_obs, 1):
+            continue
+        i = idx[np.argmin(v[idx])]  # first minimum if tied
+        rows.append({
+            "seasonal_year": int(y),
+            "n_obs": int(len(idx)),
+            "first_date": local[idx[0]].strftime("%Y-%m-%d"),
+            "last_date": local[idx[-1]].strftime("%Y-%m-%d"),
+            "ndvi_min": float(v[i]),
+            "ndvi_min_date": local[i].strftime("%Y-%m-%d"),
+        })
+        t_min.append(t[i])
+        v_min.append(v[i])
+    if not rows:
+        return out
+
+    table = pd.DataFrame(rows).set_index("seasonal_year")
+    first_y, last_y = int(table.index[0]), int(table.index[-1])
+    start_gap = (pd.Timestamp(table.loc[first_y, "first_date"])
+                 - pd.Timestamp(year=first_y - 1, month=9, day=1)).days
+    end_gap = (pd.Timestamp(year=last_y, month=8, day=31)
+               - pd.Timestamp(table.loc[last_y, "last_date"])).days
+    table["partial"] = False
+    table.loc[first_y, "partial"] = bool(start_gap > 30)
+    table.loc[last_y, "partial"] = bool(table.loc[last_y, "partial"] or end_gap > 30)
+    table["woody_at_min"] = np.nan
+    table["NDVI_H"] = np.nan
+    attrs = dict(a=None, b=None, slope_per_year=None, n_points=len(rows), tz=tz)
+
+    if len(rows) >= 2:
+        tm, vm = np.asarray(t_min), np.asarray(v_min)
+        t0, v0 = tm.mean(), vm.mean()
+        b = float(np.sum((tm - t0) * (vm - v0)) / np.sum((tm - t0) ** 2))
+        a = float(v0 - b * t0)
+        woody = a + b * t
+        table["woody_at_min"] = a + b * tm
+        table["NDVI_H"] = pd.Series(v - woody).groupby(sy).max().reindex(table.index).to_numpy()
+        attrs.update(
+            a=a, b=b, slope_per_year=b * 365.25 * 86400,
+            woody_first_date=local[0].strftime("%Y-%m-%d"), woody_first_value=float(woody[0]),
+            woody_last_date=local[-1].strftime("%Y-%m-%d"), woody_last_value=float(woody[-1]),
+        )
+    table = table[cols]
+    table.attrs.update(attrs)
+    return table
+
+
+def _decompose_seasonal_min(
+    series: pd.Series,
+    min_obs: int,
+    tz: str,
+) -> Tuple[Optional[pd.Series], Optional[pd.Series]]:
+    """Straight woody line through the yearly minima (see :func:`seasonal_min_table`)."""
+    table = seasonal_min_table(series, min_obs=min_obs, tz=tz)
+    a, b = table.attrs.get("a"), table.attrs.get("b")
+    if a is None:
+        warnings.warn(
+            f"decompose_woody_herbaceous: '{series.name}' has fewer than 2 seasonal years "
+            f"with >= {min_obs} observation(s) — need 2 minima to fit the woody line. "
+            "Skipping decomposition."
+        )
+        return None, None
+    woody_series = pd.Series(
+        a + b * np.asarray(series.index, dtype=float), index=series.index,
+        name=f"{series.name}_woody")
+    herbaceous_series = (series - woody_series).rename(f"{series.name}_herbaceous")
+    return woody_series, herbaceous_series
+
+
 def decompose_woody_herbaceous(
     series: pd.Series,
     woody_months: Tuple[int, ...] = (6, 7, 8),
     min_dry_seasons: int = 2,
     min_dry_obs: int = 2,
-    method: str = "helman2015",
+    method: str = "seasonal_min_trend",
     wet_months: Tuple[int, ...] = (10, 11, 12, 1, 2, 3, 4),
     wet_min_rule: bool = False,
     woody_interp: str = "linear",
+    min_obs: int = 1,
+    tz: str = "Asia/Jerusalem",
 ) -> Tuple[Optional[pd.Series], Optional[pd.Series]]:
     """Decompose NDVI time series into woody and herbaceous components.
 
-    ``method="helman2015"`` (default) builds on Helman et al. (2015) Sec. 2.3,
+    ``method="seasonal_min_trend"`` (default, v20 decision of 10 Nov 2026): the
+    minimum of the smoothed NDVI in each seasonal year (Sep–Aug, local dates in
+    *tz*; all years of the record, partial edge years included) is taken at its
+    own date, and one least-squares line is fitted through those minima. That
+    line is the woody series (no steps, no NaN, defined on every date); the
+    herbaceous component is NDVI minus the line. See :func:`seasonal_min_table`
+    for the yearly minima and per-year ``NDVI_H``. Needs at least 2 seasonal
+    years with *min_obs* observations, otherwise returns ``(None, None)`` with
+    a warning.
+
+    ``method="helman2015"`` builds on Helman et al. (2015) Sec. 2.3,
     per seasonal year (Sep–Aug):
 
     1. Woody NDVI (``NDVI_W``) of each seasonal year is the mean NDVI over the
@@ -329,9 +460,10 @@ def decompose_woody_herbaceous(
     with fewer than *min_dry_obs* dry-season observations gets no NDVI_W. The
     per-year peak ``NDVI_H`` is available from :func:`helman_annual_table`.
 
-    ``method="linear_trend"`` is the earlier repo behaviour, kept only to
+    ``method="linear_trend"`` is the earlier repo behaviour (v12), kept only to
     reproduce older results: a linear regression through the calendar-year
-    dry-season means. It is not part of Helman (2015).
+    mean NDVI of *woody_months* (default Jun–Aug), read at each date's calendar
+    year (UTC). It is not part of Helman (2015).
 
     Parameters
     ----------
@@ -349,7 +481,14 @@ def decompose_woody_herbaceous(
         ``helman2015`` only: minimum dry-season observations a seasonal year
         needs to get a woody value. Judgment call (sparse sources such as S2
         have few dates in a summer).
-    method : {"helman2015", "linear_trend"}
+    method : {"seasonal_min_trend", "helman2015", "linear_trend"}
+    min_obs : int
+        ``seasonal_min_trend`` only: minimum observations a seasonal year needs
+        to contribute a minimum (default 1, so partial edge years count).
+    tz : str
+        ``seasonal_min_trend`` only: time zone for the local calendar dates
+        that define seasonal years (default ``"Asia/Jerusalem"``). The other
+        methods use UTC dates, unchanged.
     wet_months : tuple of int
         ``helman2015`` only: months searched for the abrupt-loss minimum
         (Oct–Apr in the paper).
@@ -362,8 +501,9 @@ def decompose_woody_herbaceous(
     Returns
     -------
     woody_series : pd.Series or None
-        Woody series, same index as *series* (NaN outside the span of
-        seasonal years with an NDVI_W). ``None`` if no seasonal year qualifies.
+        Woody series, same index as *series*. With ``helman2015`` it is NaN
+        outside the span of seasonal years with an NDVI_W. ``None`` if the
+        method cannot be applied (too few seasonal years).
     herbaceous_series : pd.Series or None
         Herbaceous component (series − woody), same index; ``None`` as above.
 
@@ -373,10 +513,13 @@ def decompose_woody_herbaceous(
     >>> if woody is None:
     ...     print("Insufficient dry seasons — decomposition skipped")
     """
+    if method == "seasonal_min_trend":
+        return _decompose_seasonal_min(series, min_obs, tz)
     if method == "linear_trend":
         return _decompose_linear_trend(series, woody_months, min_dry_seasons)
     if method != "helman2015":
-        raise ValueError(f"unknown method {method!r}; use 'helman2015' or 'linear_trend'")
+        raise ValueError(
+            f"unknown method {method!r}; use 'seasonal_min_trend', 'helman2015' or 'linear_trend'")
 
     table = helman_annual_table(series, woody_months, min_dry_obs, wet_months,
                                 wet_min_rule, woody_interp)
